@@ -1,0 +1,10 @@
+{
+  "name": "หนุมาน: ศึกไมยราพ",
+  "short_name": "ศึกไมยราพ",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#070817",
+  "theme_color": "#070817",
+  "description": "เกมแอ็กชัน 2D ไทยแฟนตาซี"
+}

@@ -1,0 +1,16 @@
+node_modules/
+dist/
+.vite/
+coverage/
+.env*
+!.env.example
+*.log
+playwright-report/
+test-results/
+*.tsbuildinfo
+public/assets/**/*-chroma.png
+public/assets/**/atlas.png
+public/assets/**/*.source.png
+public/assets/**/background.png
+public/assets/poster/opening-poster.png
+public/assets/ui/objects-atlas.png

@@ -1,0 +1,165 @@
+:root {
+  color-scheme: dark;
+  font-family: "Noto Sans Thai", "Leelawadee UI", Tahoma, sans-serif;
+  background: #03040b;
+  --gold: #e8c071;
+  --cyan: #56e6ff;
+  --ink: #070817;
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body,
+#game-shell,
+#game-container {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: radial-gradient(circle at 50% 30%, #182448, #050610 72%);
+}
+
+canvas {
+  display: block;
+  margin: auto;
+  max-width: 100%;
+  max-height: 100%;
+  box-shadow: 0 0 80px rgb(33 59 112 / 35%);
+}
+
+#touch-controls {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  pointer-events: none;
+  padding:
+    max(18px, env(safe-area-inset-top))
+    max(20px, env(safe-area-inset-right))
+    max(18px, env(safe-area-inset-bottom))
+    max(20px, env(safe-area-inset-left));
+}
+
+.touch-cluster {
+  position: absolute;
+  bottom: max(18px, env(safe-area-inset-bottom));
+  display: flex;
+  gap: 14px;
+  align-items: end;
+}
+
+.touch-move {
+  left: max(20px, env(safe-area-inset-left));
+}
+
+.touch-action {
+  right: max(20px, env(safe-area-inset-right));
+}
+
+#touch-controls button {
+  pointer-events: auto;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  border: 2px solid rgb(232 192 113 / 72%);
+  background:
+    linear-gradient(145deg, rgb(28 36 65 / 76%), rgb(6 8 20 / 82%)),
+    radial-gradient(circle, rgb(86 230 255 / 24%), transparent);
+  color: #fff8df;
+  font: 700 14px/1 "Noto Sans Thai", "Leelawadee UI", sans-serif;
+  text-shadow: 0 1px 4px #000;
+  box-shadow:
+    inset 0 0 18px rgb(86 230 255 / 14%),
+    0 6px 20px rgb(0 0 0 / 28%);
+  touch-action: none;
+}
+
+#touch-controls button.small {
+  width: 58px;
+  height: 58px;
+  font-size: 12px;
+}
+
+#touch-controls button.active {
+  transform: scale(0.92);
+  background: rgb(38 150 187 / 70%);
+  box-shadow: 0 0 22px rgb(86 230 255 / 65%);
+}
+
+#orientation-overlay,
+#fatal-error {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: none;
+  place-content: center;
+  justify-items: center;
+  gap: 12px;
+  padding: 24px;
+  text-align: center;
+  background:
+    radial-gradient(circle at 50% 28%, rgb(63 81 141 / 45%), transparent 45%),
+    #060815;
+  color: #fff8df;
+}
+
+#orientation-overlay strong {
+  font-size: clamp(22px, 6vw, 34px);
+  color: var(--gold);
+}
+
+#orientation-overlay span {
+  color: #aab9d8;
+}
+
+.rotate-icon {
+  font-size: 64px;
+  color: var(--cyan);
+  animation: rotateHint 2.4s ease-in-out infinite;
+}
+
+#fatal-error[hidden] {
+  display: none;
+}
+
+#fatal-error:not([hidden]) {
+  display: grid;
+}
+
+#fatal-error button {
+  padding: 12px 24px;
+  border: 1px solid var(--gold);
+  border-radius: 999px;
+  background: #182448;
+  color: white;
+}
+
+@keyframes rotateHint {
+  50% {
+    transform: rotate(90deg);
+  }
+}
+
+@media (orientation: portrait) and (max-width: 900px) {
+  #orientation-overlay {
+    display: grid;
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  #touch-controls {
+    display: none !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

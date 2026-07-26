@@ -1,0 +1,595 @@
+import Phaser from "phaser";
+import { audioDirector } from "../audio/AudioDirector";
+import { Boss } from "../entities/Boss";
+import { Enemy, type EnemyKind } from "../entities/Enemy";
+import { Player } from "../entities/Player";
+import { levelById } from "../data/levels";
+import type { LevelDefinition } from "../data/types";
+import { saveStore } from "../storage/saveStore";
+import { touchInput } from "../systems/touchInput";
+import { FONT_FAMILY } from "../ui/components";
+
+const WORLD_WIDTH = 3840;
+const FLOOR_Y = 650;
+
+export abstract class BaseLevelScene extends Phaser.Scene {
+  protected abstract readonly levelId: 1 | 2 | 3;
+  private level!: LevelDefinition;
+  private player!: Player;
+  private boss?: Boss;
+  private enemies: Enemy[] = [];
+  private platforms!: Phaser.Physics.Arcade.StaticGroup;
+  private startTime = 0;
+  private collected = new Set<string>();
+  private checkpointX = 140;
+  private bossStarted = false;
+  private bossDefeated = false;
+  private completing = false;
+  private hpBar!: Phaser.GameObjects.Rectangle;
+  private windBar!: Phaser.GameObjects.Rectangle;
+  private collectibleText!: Phaser.GameObjects.Text;
+  private bossBarBg!: Phaser.GameObjects.Rectangle;
+  private bossBar!: Phaser.GameObjects.Rectangle;
+  private bossLabel!: Phaser.GameObjects.Text;
+  private instruction!: Phaser.GameObjects.Text;
+  private heartSeals: Phaser.GameObjects.Image[] = [];
+  private heart?: Phaser.GameObjects.Image;
+  private heartHits = 0;
+  private readonly pauseHandler = () => this.pauseGame();
+
+  create(): void {
+    this.level = levelById(this.levelId);
+    this.startTime = this.time.now;
+    const save = saveStore.get();
+    const savedCollectibles = save.levelStats[String(this.levelId)]?.collectibles ?? [];
+    this.collected = new Set(savedCollectibles);
+    const checkpoint = save.latestCheckpoint;
+    this.checkpointX =
+      checkpoint?.levelId === this.levelId
+        ? checkpoint.checkpointId === "cp-2"
+          ? 2470
+          : 1330
+        : 140;
+
+    document.querySelector<HTMLElement>("#touch-controls")!.hidden = false;
+    document.querySelector<HTMLElement>("#touch-controls")!.style.opacity = String(
+      save.settings.touchOpacity,
+    );
+    touchInput.reset();
+    this.physics.world.setBounds(0, 0, WORLD_WIDTH, 720);
+    this.cameras.main.setBounds(0, 0, WORLD_WIDTH, 720);
+    this.createWorldArt();
+    this.createTerrain();
+    this.player = new Player(this, this.checkpointX, 560);
+    this.physics.add.collider(this.player, this.platforms);
+    this.cameras.main.startFollow(this.player, true, 0.08, 0.1);
+    this.cameras.main.setDeadzone(240, 120);
+    this.cameras.main.setFollowOffset(-80, 20);
+    this.spawnCollectibles();
+    this.spawnCheckpoints();
+    this.spawnHazards();
+    this.spawnEnemies();
+    if (this.levelId === 3) this.spawnHeartSequence();
+    this.createExit();
+    this.createHud();
+    this.bindEvents();
+    this.showStory();
+
+    const keyboard = this.input.keyboard;
+    keyboard?.on("keydown-ESC", this.pauseHandler);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      keyboard?.off("keydown-ESC", this.pauseHandler);
+      document.querySelector<HTMLElement>("#touch-controls")!.hidden = true;
+    });
+  }
+
+  update(time: number): void {
+    if (!this.player?.active || this.completing) return;
+    this.player.update(time);
+    this.enemies.forEach((enemy) => enemy.update(time));
+    this.boss?.update(time);
+    if (!this.bossStarted && this.player.x > 3190 && (this.levelId < 3 || this.heartHits >= 3)) {
+      this.startBoss();
+    }
+    if (this.player.y > 710) this.respawn();
+  }
+
+  private createWorldArt(): void {
+    for (let segment = 0; segment < 3; segment += 1) {
+      this.add
+        .image(640 + segment * 1280, 360, this.level.background)
+        .setDisplaySize(1280, 720)
+        .setDepth(-20);
+    }
+    const topShade = this.add.graphics().setDepth(-10);
+    topShade.fillGradientStyle(0x03040c, 0x03040c, 0x03040c, 0x03040c, 0.3, 0.3, 0, 0);
+    topShade.fillRect(0, 0, WORLD_WIDTH, 180);
+    const quality = saveStore.get().settings.quality;
+    if (quality !== "low") {
+      for (let index = 0; index < 24; index += 1) {
+        const mote = this.add
+          .circle(Phaser.Math.Between(0, WORLD_WIDTH), Phaser.Math.Between(100, 610), Phaser.Math.Between(1, 3), this.level.accent, 0.35)
+          .setDepth(-5);
+        this.tweens.add({
+          targets: mote,
+          y: mote.y - Phaser.Math.Between(45, 120),
+          alpha: 0.05,
+          duration: Phaser.Math.Between(2200, 4400),
+          yoyo: true,
+          repeat: -1,
+          delay: Phaser.Math.Between(0, 1800),
+        });
+      }
+    }
+  }
+
+  private createTerrain(): void {
+    this.platforms = this.physics.add.staticGroup();
+    const addPlatform = (x: number, y: number, width: number, height: number) => {
+      const platform = this.add.rectangle(x, y, width, height, 0x000000, 0.001);
+      this.platforms.add(platform);
+      (platform.body as Phaser.Physics.Arcade.StaticBody).updateFromGameObject();
+    };
+    addPlatform(WORLD_WIDTH / 2, FLOOR_Y + 42, WORLD_WIDTH, 84);
+    [
+      [520, 520, 250],
+      [970, 455, 210],
+      [1450, 525, 250],
+      [1850, 430, 230],
+      [2290, 505, 240],
+      [2730, 440, 250],
+      [3040, 540, 190],
+    ].forEach(([x, y, width]) => addPlatform(x, y, width, 24));
+  }
+
+  private spawnEnemies(): void {
+    const roster: Array<[number, EnemyKind]> = [
+      [760, "yak-guard"],
+      [1110, "yak-archer"],
+      [1570, "bat-spirit"],
+      [2040, "shadow-mage"],
+      [2390, "yak-guard"],
+      [2790, this.levelId === 1 ? "yak-archer" : "bat-spirit"],
+    ];
+    roster.forEach(([x, kind]) => {
+      const enemy = new Enemy(this, x, 570, kind, this.player);
+      this.enemies.push(enemy);
+      this.physics.add.collider(enemy, this.platforms);
+    });
+  }
+
+  private spawnCollectibles(): void {
+    [610, 1740, 2870].forEach((x, index) => {
+      const id = `seal-${index + 1}`;
+      if (this.collected.has(id)) return;
+      const seal = this.physics.add.staticImage(x, index === 1 ? 330 : 460, "rama-seal");
+      seal.setScale(0.17).setDepth(15);
+      this.tweens.add({
+        targets: seal,
+        y: seal.y - 14,
+        angle: 4,
+        duration: 1200,
+        yoyo: true,
+        repeat: -1,
+        ease: "Sine.inOut",
+      });
+      this.physics.add.overlap(this.player, seal, () => {
+        if (!seal.active) return;
+        this.collected.add(id);
+        saveStore.collect(this.levelId, id);
+        seal.disableBody(true, true);
+        this.player.addWind(25);
+        audioDirector.play("collect");
+        this.collectibleText.setText(`${this.collected.size}/3`);
+        this.flashMessage(this.levelId === 1 ? "ตราพระราม" : "RAMA SEAL", this.level.accent);
+      });
+    });
+  }
+
+  private spawnCheckpoints(): void {
+    [
+      [1300, "cp-1"],
+      [2440, "cp-2"],
+    ].forEach(([x, id]) => {
+      const checkpoint = this.physics.add.staticImage(Number(x), 562, "checkpoint");
+      checkpoint.setScale(0.23).setDepth(14);
+      this.physics.add.overlap(this.player, checkpoint, () => {
+        const checkpointId = String(id);
+        if (this.checkpointX === Number(x) + 30) return;
+        this.checkpointX = Number(x) + 30;
+        saveStore.setCheckpoint(this.levelId, checkpointId);
+        checkpoint.setTint(0x9affff);
+        this.player.healAndRestore();
+        audioDirector.play("checkpoint");
+        this.flashMessage("จุดพักวายุ • CHECKPOINT", 0x65f2ff);
+      });
+    });
+  }
+
+  private spawnHazards(): void {
+    const positions = this.levelId === 1 ? [900, 2160] : this.levelId === 2 ? [880, 2180] : [980, 2220, 2860];
+    positions.forEach((x, index) => {
+      const texture = this.levelId === 1 && index === 0 ? "sleep-mist" : "blade-trap";
+      const hazard = this.physics.add.staticImage(x, 598, texture);
+      hazard.setScale(texture === "sleep-mist" ? 0.18 : 0.16).setDepth(16);
+      if (texture === "blade-trap") {
+        this.tweens.add({ targets: hazard, angle: 360, duration: 2600, repeat: -1 });
+      } else {
+        this.tweens.add({ targets: hazard, alpha: 0.55, duration: 900, yoyo: true, repeat: -1 });
+      }
+      this.physics.add.overlap(this.player, hazard, () => this.player.takeDamage(12, hazard.x));
+    });
+  }
+
+  private spawnHeartSequence(): void {
+    [2740, 2920, 3090].forEach((x) => {
+      const seal = this.add.image(x, 545, "heart-seal").setScale(0.2).setDepth(16);
+      this.heartSeals.push(seal);
+      this.tweens.add({
+        targets: seal,
+        alpha: 0.58,
+        duration: 760,
+        yoyo: true,
+        repeat: -1,
+      });
+    });
+    this.heart = this.add.image(3190, 445, "heart-reliquary").setScale(0.22).setDepth(16);
+    this.instruction = this.add
+      .text(640, 570, "", {
+        fontFamily: FONT_FAMILY,
+        fontSize: "20px",
+        fontStyle: "bold",
+        color: "#effff0",
+        backgroundColor: "#15120cdd",
+        padding: { x: 18, y: 10 },
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(60);
+  }
+
+  private createExit(): void {
+    const exit = this.physics.add.staticImage(3720, 530, "exit-portal");
+    exit.setScale(0.29).setDepth(15).setVisible(false);
+    this.physics.add.overlap(this.player, exit, () => {
+      if (this.bossDefeated) this.finishLevel();
+    });
+    this.events.on("reveal-exit", () => {
+      exit.setVisible(true);
+      this.tweens.add({ targets: exit, alpha: 0.65, duration: 700, yoyo: true, repeat: -1 });
+    });
+  }
+
+  private createHud(): void {
+    const lang = saveStore.get().settings.language;
+    const panel = this.add.graphics().setScrollFactor(0).setDepth(50);
+    panel.fillStyle(0x070a17, 0.82);
+    panel.fillRoundedRect(22, 20, 390, 92, 12);
+    panel.lineStyle(2, 0xd8ad58, 0.66);
+    panel.strokeRoundedRect(22, 20, 390, 92, 12);
+    this.add
+      .text(42, 36, "HP", {
+        fontFamily: FONT_FAMILY,
+        fontSize: "15px",
+        fontStyle: "bold",
+        color: "#ffe1ae",
+      })
+      .setScrollFactor(0)
+      .setDepth(52);
+    this.add
+      .text(42, 76, lang === "th" ? "วายุ" : "WIND", {
+        fontFamily: FONT_FAMILY,
+        fontSize: "14px",
+        fontStyle: "bold",
+        color: "#bcefff",
+      })
+      .setScrollFactor(0)
+      .setDepth(52);
+    this.add.rectangle(100, 48, 286, 18, 0x240e19, 0.9).setOrigin(0, 0.5).setScrollFactor(0).setDepth(51);
+    this.hpBar = this.add.rectangle(100, 48, 286, 14, 0xe95e66, 1).setOrigin(0, 0.5).setScrollFactor(0).setDepth(52);
+    this.add.rectangle(100, 87, 286, 12, 0x082330, 0.9).setOrigin(0, 0.5).setScrollFactor(0).setDepth(51);
+    this.windBar = this.add.rectangle(100, 87, 200, 8, 0x57dff5, 1).setOrigin(0, 0.5).setScrollFactor(0).setDepth(52);
+    this.add.image(450, 56, "rama-seal").setScale(0.085).setScrollFactor(0).setDepth(52);
+    this.collectibleText = this.add
+      .text(490, 56, `${this.collected.size}/3`, {
+        fontFamily: FONT_FAMILY,
+        fontSize: "20px",
+        fontStyle: "bold",
+        color: "#ffe29d",
+      })
+      .setOrigin(0, 0.5)
+      .setScrollFactor(0)
+      .setDepth(52);
+
+    const pause = this.add
+      .text(1232, 45, "Ⅱ", {
+        fontFamily: FONT_FAMILY,
+        fontSize: "30px",
+        fontStyle: "bold",
+        color: "#fff1ce",
+        backgroundColor: "#10172bdd",
+        padding: { x: 17, y: 9 },
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(55)
+      .setInteractive({ useHandCursor: true })
+      .on("pointerup", () => this.pauseGame());
+    pause.setShadow(0, 2, "#000", 5);
+
+    this.bossBarBg = this.add
+      .rectangle(640, 45, 490, 18, 0x230a12, 0.92)
+      .setScrollFactor(0)
+      .setDepth(51)
+      .setVisible(false);
+    this.bossBar = this.add
+      .rectangle(395, 45, 490, 12, 0xd54b5e, 1)
+      .setOrigin(0, 0.5)
+      .setScrollFactor(0)
+      .setDepth(52)
+      .setVisible(false);
+    this.bossLabel = this.add
+      .text(640, 18, this.level.bossName[lang], {
+        fontFamily: FONT_FAMILY,
+        fontSize: "15px",
+        fontStyle: "bold",
+        color: "#ffe6b2",
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(52)
+      .setVisible(false);
+
+    if (this.levelId !== 3) {
+      this.instruction = this.add
+        .text(640, 660, "", {
+          fontFamily: FONT_FAMILY,
+          fontSize: "18px",
+          color: "#dbeeff",
+          backgroundColor: "#060916cc",
+          padding: { x: 18, y: 9 },
+        })
+        .setOrigin(0.5)
+        .setScrollFactor(0)
+        .setDepth(55);
+    }
+  }
+
+  private bindEvents(): void {
+    this.events.on("player-stats", (stats: { health: number; wind: number }) => {
+      this.hpBar.width = 286 * (stats.health / 100);
+      this.windBar.width = 286 * (stats.wind / 100);
+    });
+    this.events.on("player-attack", (x: number, y: number, damage: number, skill: boolean) => {
+      const range = new Phaser.Geom.Rectangle(x - (skill ? 170 : 85), y - 100, skill ? 340 : 170, 200);
+      this.enemies.forEach((enemy) => {
+        if (enemy.active && Phaser.Geom.Intersects.RectangleToRectangle(range, enemy.getBounds())) {
+          enemy.hit(damage, this.player.x);
+          this.player.addWind(6);
+        }
+      });
+      if (this.boss?.active && Phaser.Geom.Intersects.RectangleToRectangle(range, this.boss.getBounds())) {
+        this.boss.hit(damage, this.player.x);
+        this.player.addWind(5);
+      }
+      if (this.levelId === 3) this.hitHeartSequence(range);
+    });
+    this.events.on("wind-vfx", (x: number, y: number, color: number) => this.windVfx(x, y, color));
+    this.events.on("enemy-strike", (x: number, y: number) => this.impactVfx(x, y, 0xd6547d));
+    this.events.on("boss-slam", (x: number, y: number) => {
+      this.impactVfx(x, y, 0xffc44f);
+      if (saveStore.get().settings.screenShake) this.cameras.main.shake(100, 0.0035);
+    });
+    this.events.on("boss-health", (health: number, max: number) => {
+      this.bossBar.width = 490 * (health / max);
+    });
+    this.events.on("boss-defeated", () => this.onBossDefeated());
+    this.events.on("player-defeated", () => this.respawn());
+    this.events.on("enemy-defeated", (x: number, y: number) => {
+      this.windVfx(x, y, 0x9a7cff);
+      this.player.addWind(12);
+    });
+  }
+
+  private hitHeartSequence(range: Phaser.Geom.Rectangle): void {
+    const seal = this.heartSeals.find(
+      (candidate) =>
+        candidate.active && Phaser.Geom.Intersects.RectangleToRectangle(range, candidate.getBounds()),
+    );
+    if (seal) {
+      seal.destroy();
+      audioDirector.play("hit");
+      this.flashMessage(`ผนึกถูกทำลาย ${3 - this.heartSeals.filter((item) => item.active).length}/3`, 0xb7ff70);
+      return;
+    }
+    const sealsRemain = this.heartSeals.some((item) => item.active);
+    if (this.heart?.active && !sealsRemain && Phaser.Geom.Intersects.RectangleToRectangle(range, this.heart.getBounds())) {
+      this.heartHits += 1;
+      this.heart.setTintFill(0xffffff);
+      this.time.delayedCall(80, () => this.heart?.clearTint());
+      this.flashMessage(`ดวงใจไมยราพ ${this.heartHits}/3`, 0xe8ff76);
+      if (this.heartHits >= 3) {
+        this.heart.destroy();
+        this.instruction.setText("ดวงใจถูกทำลาย! ไมยราพสูญเสียความเป็นอมตะ");
+        this.time.delayedCall(2200, () => this.instruction.setText(""));
+      }
+    }
+  }
+
+  private startBoss(): void {
+    this.bossStarted = true;
+    this.enemies.forEach((enemy) => {
+      if (enemy.active && enemy.x > 3000) enemy.disableBody(true, true);
+    });
+    this.boss = new Boss(this, 3530, 565, this.level.bossTexture, this.player, this.levelId);
+    this.physics.add.collider(this.boss, this.platforms);
+    this.bossBarBg.setVisible(true);
+    this.bossBar.setVisible(true);
+    this.bossLabel.setVisible(true);
+    this.cameras.main.stopFollow();
+    this.cameras.main.pan(3200, 360, 700, "Sine.easeInOut", false, (_camera, progress) => {
+      if (progress === 1) {
+        this.cameras.main.startFollow(this.player, true, 0.08, 0.1);
+        this.cameras.main.setBounds(3040, 0, 800, 720);
+      }
+    });
+    this.flashMessage(this.level.bossName[saveStore.get().settings.language], 0xffd36d);
+  }
+
+  private onBossDefeated(): void {
+    this.bossDefeated = true;
+    this.bossBarBg.setVisible(false);
+    this.bossBar.setVisible(false);
+    this.bossLabel.setVisible(false);
+    this.cameras.main.setBounds(0, 0, WORLD_WIDTH, 720);
+    audioDirector.play("victory");
+    const message =
+      this.levelId === 2
+        ? "มัจฉานุยุติการต่อสู้และเปิดทางลับ"
+        : this.levelId === 3
+          ? "ไมยราพสิ้นฤทธิ์ พระรามได้รับการช่วยเหลือ"
+          : "ประตูบาดาลเปิดออก";
+    this.flashMessage(message, 0xffe09a, 2800);
+    this.events.emit("reveal-exit");
+  }
+
+  private finishLevel(): void {
+    if (this.completing) return;
+    this.completing = true;
+    const elapsed = this.time.now - this.startTime;
+    saveStore.completeLevel(this.levelId, elapsed, this.player.stats.damageTaken);
+    this.cameras.main.fadeOut(800, 3, 5, 13);
+    this.time.delayedCall(850, () =>
+      this.scene.start("ResultScene", {
+        levelId: this.levelId,
+        timeMs: elapsed,
+        damageTaken: this.player.stats.damageTaken,
+        collectibles: this.collected.size,
+      }),
+    );
+  }
+
+  private respawn(): void {
+    if (!this.player.active || this.completing) return;
+    this.player.setActive(false);
+    this.physics.pause();
+    this.cameras.main.fadeOut(320, 30, 5, 18);
+    this.time.delayedCall(550, () => {
+      this.player.setPosition(this.checkpointX, 520);
+      this.player.setVelocity(0, 0);
+      this.player.healAndRestore();
+      this.player.setActive(true);
+      this.physics.resume();
+      this.cameras.main.fadeIn(320, 5, 8, 20);
+    });
+  }
+
+  private pauseGame(): void {
+    if (this.scene.isPaused()) return;
+    touchInput.reset();
+    this.scene.pause();
+    this.scene.launch("PauseScene", { owner: this.scene.key });
+  }
+
+  private showStory(): void {
+    const language = saveStore.get().settings.language;
+    const shade = this.add.rectangle(640, 360, 1280, 720, 0x030510, 0.48).setScrollFactor(0).setDepth(80);
+    const chapter = this.add
+      .text(640, 265, `ด่าน ${this.levelId} • CHAPTER 0${this.levelId}`, {
+        fontFamily: FONT_FAMILY,
+        fontSize: "18px",
+        color: "#70def0",
+        letterSpacing: 4,
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(81);
+    const title = this.add
+      .text(640, 320, this.level.title[language], {
+        fontFamily: FONT_FAMILY,
+        fontSize: "44px",
+        fontStyle: "bold",
+        color: "#fff1c6",
+        stroke: "#080812",
+        strokeThickness: 7,
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(81);
+    const story = this.add
+      .text(640, 390, this.level.story[language], {
+        fontFamily: FONT_FAMILY,
+        fontSize: "20px",
+        color: "#d5deef",
+        align: "center",
+        wordWrap: { width: 790 },
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(81);
+    this.time.delayedCall(2600, () => {
+      this.tweens.add({
+        targets: [shade, chapter, title, story],
+        alpha: 0,
+        duration: 650,
+        onComplete: () => [shade, chapter, title, story].forEach((item) => item.destroy()),
+      });
+      if (this.levelId === 1) {
+        this.instruction.setText("A/D หรือ ◀ ▶ เคลื่อนที่ · SPACE/กระโดด · J/โจมตี");
+        this.time.delayedCall(5000, () => this.instruction.setText(""));
+      }
+    });
+  }
+
+  private flashMessage(text: string, color: number, duration = 1500): void {
+    const message = this.add
+      .text(640, 145, text, {
+        fontFamily: FONT_FAMILY,
+        fontSize: "25px",
+        fontStyle: "bold",
+        color: `#${color.toString(16).padStart(6, "0")}`,
+        backgroundColor: "#060915dd",
+        padding: { x: 22, y: 11 },
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(75)
+      .setAlpha(0);
+    this.tweens.add({
+      targets: message,
+      alpha: 1,
+      y: 132,
+      duration: 240,
+      yoyo: true,
+      hold: duration,
+      onComplete: () => message.destroy(),
+    });
+  }
+
+  private windVfx(x: number, y: number, color: number): void {
+    for (let index = 0; index < 8; index += 1) {
+      const particle = this.add.circle(x, y, Phaser.Math.Between(2, 6), color, 0.75).setDepth(30);
+      const angle = (Math.PI * 2 * index) / 8;
+      this.tweens.add({
+        targets: particle,
+        x: x + Math.cos(angle) * Phaser.Math.Between(55, 115),
+        y: y + Math.sin(angle) * Phaser.Math.Between(40, 90),
+        alpha: 0,
+        scale: 0.2,
+        duration: 420,
+        onComplete: () => particle.destroy(),
+      });
+    }
+  }
+
+  private impactVfx(x: number, y: number, color: number): void {
+    const ring = this.add.circle(x, y, 18, color, 0).setStrokeStyle(5, color, 0.8).setDepth(31);
+    this.tweens.add({
+      targets: ring,
+      scale: 4,
+      alpha: 0,
+      duration: 300,
+      onComplete: () => ring.destroy(),
+    });
+  }
+}

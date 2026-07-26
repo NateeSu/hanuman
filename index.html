@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="th">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#070817" />
+    <meta name="description" content="หนุมาน: ศึกไมยราพ — เกมแอ็กชันไทยแฟนตาซี 2D" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <title>หนุมาน: ศึกไมยราพ</title>
+  </head>
+  <body>
+    <main id="game-shell" aria-label="หนุมาน: ศึกไมยราพ">
+      <div id="game-container"></div>
+      <div id="touch-controls" aria-label="ปุ่มควบคุมแบบสัมผัส" hidden>
+        <div class="touch-cluster touch-move">
+          <button data-action="left" aria-label="เดินซ้าย">◀</button>
+          <button data-action="right" aria-label="เดินขวา">▶</button>
+        </div>
+        <div class="touch-cluster touch-action">
+          <button data-action="skill" class="small" aria-label="พลังวายุ">วายุ</button>
+          <button data-action="dash" class="small" aria-label="พุ่ง">พุ่ง</button>
+          <button data-action="jump" aria-label="กระโดด">กระโดด</button>
+          <button data-action="attack" aria-label="โจมตี">โจมตี</button>
+        </div>
+      </div>
+      <div id="orientation-overlay" role="dialog" aria-live="polite">
+        <div class="rotate-icon">↻</div>
+        <strong>หมุนอุปกรณ์เป็นแนวนอนเพื่อเล่น</strong>
+        <span>Rotate your device to landscape</span>
+      </div>
+      <div id="fatal-error" role="alert" hidden>
+        <strong>ไม่สามารถเปิดเกมได้</strong>
+        <p id="fatal-error-message"></p>
+        <button onclick="location.reload()">ลองอีกครั้ง</button>
+      </div>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

@@ -6,6 +6,7 @@ import { Player } from "../entities/Player";
 import { levelById } from "../data/levels";
 import type { LevelDefinition } from "../data/types";
 import { saveStore } from "../storage/saveStore";
+import { BOSS_ARENA, resolveRespawnX } from "../systems/bossArena";
 import { touchInput } from "../systems/touchInput";
 import { FONT_FAMILY } from "../ui/components";
 
@@ -429,8 +430,8 @@ export abstract class BaseLevelScene extends Phaser.Scene {
     this.cameras.main.stopFollow();
     this.cameras.main.pan(3200, 360, 700, "Sine.easeInOut", false, (_camera, progress) => {
       if (progress === 1) {
+        this.cameras.main.setBounds(BOSS_ARENA.left, 0, BOSS_ARENA.width, 720);
         this.cameras.main.startFollow(this.player, true, 0.08, 0.1);
-        this.cameras.main.setBounds(3040, 0, 800, 720);
       }
     });
     this.flashMessage(this.level.bossName[saveStore.get().settings.language], 0xffd36d);
@@ -475,7 +476,12 @@ export abstract class BaseLevelScene extends Phaser.Scene {
     this.physics.pause();
     this.cameras.main.fadeOut(320, 30, 5, 18);
     this.time.delayedCall(550, () => {
-      this.player.setPosition(this.checkpointX, 520);
+      const respawnX = resolveRespawnX(
+        this.checkpointX,
+        this.bossStarted,
+        this.bossDefeated,
+      );
+      this.player.setPosition(respawnX, 520);
       this.player.setVelocity(0, 0);
       this.player.healAndRestore();
       this.player.setActive(true);

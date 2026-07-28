@@ -2,8 +2,18 @@ import Phaser from "phaser";
 import { audioDirector } from "../audio/AudioDirector";
 import { Boss } from "../entities/Boss";
 import { Enemy, type EnemyKind } from "../entities/Enemy";
+import {
+  HostileProjectile,
+  type HostileProjectileKind,
+  type HostileProjectilePayload,
+} from "../entities/HostileProjectile";
 import { Player } from "../entities/Player";
 import { levelById } from "../data/levels";
+import {
+  getTerrainPlatforms,
+  getTerrainSurfaceAt,
+  getTerrainSurfaceY,
+} from "../data/terrain";
 import type { LevelDefinition } from "../data/types";
 import { saveStore } from "../storage/saveStore";
 import { BOSS_ARENA, resolveRespawnX } from "../systems/bossArena";
@@ -17,8 +27,6 @@ import {
 import { FONT_FAMILY } from "../ui/components";
 
 const WORLD_WIDTH = 3840;
-const FLOOR_Y = 650;
-
 interface TrishulaRuntime {
   sprite: Phaser.GameObjects.Image;
   aura: Phaser.GameObjects.Image;
@@ -38,6 +46,7 @@ export abstract class BaseLevelScene extends Phaser.Scene {
   private enemies: Enemy[] = [];
   private platforms!: Phaser.Physics.Arcade.StaticGroup;
   private startTime = 0;
+  private gameplayStartsAt = 0;
   private collected = new Set<string>();
   private checkpointX = 140;
   private bossStarted = false;
@@ -53,12 +62,14 @@ export abstract class BaseLevelScene extends Phaser.Scene {
   private heartSeals: Phaser.GameObjects.Image[] = [];
   private heart?: Phaser.GameObjects.Image;
   private heartHits = 0;
+  private hostileProjectiles = new Set<HostileProjectile>();
   private trishula?: TrishulaRuntime;
   private readonly pauseHandler = () => this.pauseGame();
 
   create(): void {
     this.level = levelById(this.levelId);
     this.startTime = this.time.now;
+    this.gameplayStartsAt = this.time.now + 3300;
     const save = saveStore.get();
     const savedCollectibles = save.levelStats[String(this.levelId)]?.collectibles ?? [];
     this.collected = new Set(savedCollectibles);
@@ -69,6 +80,14 @@ export abstract class BaseLevelScene extends Phaser.Scene {
           ? 2470
           : 1330
         : 140;
+    if (import.meta.env.DEV) {
+      const debugSpawnX = Number(
+        new URLSearchParams(window.location.search).get("spawnX"),
+      );
+      if (Number.isFinite(debugSpawnX) && debugSpawnX >= 40 && debugSpawnX <= WORLD_WIDTH - 40) {
+        this.checkpointX = debugSpawnX;
+      }
+    }
 
     document.querySelector<HTMLElement>("#touch-controls")!.hidden = false;
     document.querySelector<HTMLElement>("#touch-controls")!.style.opacity = String(
@@ -79,7 +98,7 @@ export abstract class BaseLevelScene extends Phaser.Scene {
     this.cameras.main.setBounds(0, 0, WORLD_WIDTH, 720);
     this.createWorldArt();
     this.createTerrain();
-    this.player = new Player(this, this.checkpointX, 560);
+    this.player = new Player(this, this.checkpointX, this.getActorSpawnY(this.checkpointX));
     this.physics.add.collider(this.player, this.platforms);
     this.cameras.main.startFollow(this.player, true, 0.08, 0.1);
     this.cameras.main.setDeadzone(240, 120);
@@ -98,15 +117,18 @@ export abstract class BaseLevelScene extends Phaser.Scene {
     keyboard?.on("keydown-ESC", this.pauseHandler);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       keyboard?.off("keydown-ESC", this.pauseHandler);
+      this.clearHostileProjectiles();
       document.querySelector<HTMLElement>("#touch-controls")!.hidden = true;
     });
   }
 
   update(time: number): void {
     if (!this.player?.active || this.completing) return;
+    if (time < this.gameplayStartsAt) return;
     this.player.update(time);
     this.enemies.forEach((enemy) => enemy.update(time));
     this.boss?.update(time);
+    this.updateHostileProjectiles(time);
     this.updateTrishulaUltimate(time);
     if (!this.bossStarted && this.player.x > 3190 && (this.levelId < 3 || this.heartHits >= 3)) {
       this.startBoss();
@@ -145,21 +167,22 @@ export abstract class BaseLevelScene extends Phaser.Scene {
 
   private createTerrain(): void {
     this.platforms = this.physics.add.staticGroup();
-    const addPlatform = (x: number, y: number, width: number, height: number) => {
-      const platform = this.add.rectangle(x, y, width, height, 0x000000, 0.001);
+    const showDebugCollision =
+      import.meta.env.DEV &&
+      new URLSearchParams(window.location.search).get("debugCollision") === "1";
+    getTerrainPlatforms(this.levelId).forEach(({ x, y, width, height }) => {
+      const platform = this.add.rectangle(
+        x + width / 2,
+        y + height / 2,
+        width,
+        height,
+        showDebugCollision ? 0x4dff91 : 0x000000,
+        showDebugCollision ? 0.2 : 0.001,
+      );
+      if (showDebugCollision) platform.setStrokeStyle(2, 0x8dffb5, 0.95).setDepth(45);
       this.platforms.add(platform);
       (platform.body as Phaser.Physics.Arcade.StaticBody).updateFromGameObject();
-    };
-    addPlatform(WORLD_WIDTH / 2, FLOOR_Y + 42, WORLD_WIDTH, 84);
-    [
-      [520, 520, 250],
-      [970, 455, 210],
-      [1450, 525, 250],
-      [1850, 430, 230],
-      [2290, 505, 240],
-      [2730, 440, 250],
-      [3040, 540, 190],
-    ].forEach(([x, y, width]) => addPlatform(x, y, width, 24));
+    });
   }
 
   private spawnEnemies(): void {
@@ -169,10 +192,20 @@ export abstract class BaseLevelScene extends Phaser.Scene {
       [1570, "bat-spirit"],
       [2040, "shadow-mage"],
       [2390, "yak-guard"],
-      [2790, this.levelId === 1 ? "yak-archer" : "bat-spirit"],
+      [2830, this.levelId === 1 ? "yak-archer" : "bat-spirit"],
     ];
     roster.forEach(([x, kind]) => {
-      const enemy = new Enemy(this, x, 570, kind, this.player);
+      const surface = getTerrainSurfaceAt(this.levelId, x);
+      const enemy = new Enemy(
+        this,
+        x,
+        this.getActorSpawnY(x),
+        kind,
+        this.player,
+        surface
+          ? { left: surface.x, right: surface.x + surface.width }
+          : undefined,
+      );
       this.enemies.push(enemy);
       this.physics.add.collider(enemy, this.platforms);
     });
@@ -182,7 +215,11 @@ export abstract class BaseLevelScene extends Phaser.Scene {
     [610, 1740, 2870].forEach((x, index) => {
       const id = `seal-${index + 1}`;
       if (this.collected.has(id)) return;
-      const seal = this.physics.add.staticImage(x, index === 1 ? 330 : 460, "rama-seal");
+      const seal = this.physics.add.staticImage(
+        x,
+        this.getSurfaceY(x) - (index === 1 ? 150 : 125),
+        "rama-seal",
+      );
       seal.setScale(0.17).setDepth(15);
       this.tweens.add({
         targets: seal,
@@ -211,7 +248,12 @@ export abstract class BaseLevelScene extends Phaser.Scene {
       [1300, "cp-1"],
       [2440, "cp-2"],
     ].forEach(([x, id]) => {
-      const checkpoint = this.physics.add.staticImage(Number(x), 562, "checkpoint");
+      const checkpointX = Number(x);
+      const checkpoint = this.physics.add.staticImage(
+        checkpointX,
+        this.getSurfaceY(checkpointX) - 72,
+        "checkpoint",
+      );
       checkpoint.setScale(0.23).setDepth(14);
       this.physics.add.overlap(this.player, checkpoint, () => {
         const checkpointId = String(id);
@@ -227,10 +269,15 @@ export abstract class BaseLevelScene extends Phaser.Scene {
   }
 
   private spawnHazards(): void {
-    const positions = this.levelId === 1 ? [900, 2160] : this.levelId === 2 ? [880, 2180] : [980, 2220, 2860];
+    const positions =
+      this.levelId === 1
+        ? [930, 2200]
+        : this.levelId === 2
+          ? [880, 2180]
+          : [980, 2220, 2860];
     positions.forEach((x, index) => {
       const texture = this.levelId === 1 && index === 0 ? "sleep-mist" : "blade-trap";
-      const hazard = this.physics.add.staticImage(x, 598, texture);
+      const hazard = this.physics.add.staticImage(x, this.getSurfaceY(x) - 36, texture);
       hazard.setScale(texture === "sleep-mist" ? 0.18 : 0.16).setDepth(16);
       if (texture === "blade-trap") {
         this.tweens.add({ targets: hazard, angle: 360, duration: 2600, repeat: -1 });
@@ -243,7 +290,10 @@ export abstract class BaseLevelScene extends Phaser.Scene {
 
   private spawnHeartSequence(): void {
     [2740, 2920, 3090].forEach((x) => {
-      const seal = this.add.image(x, 545, "heart-seal").setScale(0.2).setDepth(16);
+      const seal = this.add
+        .image(x, this.getSurfaceY(x) - 58, "heart-seal")
+        .setScale(0.2)
+        .setDepth(16);
       this.heartSeals.push(seal);
       this.tweens.add({
         targets: seal,
@@ -253,7 +303,10 @@ export abstract class BaseLevelScene extends Phaser.Scene {
         repeat: -1,
       });
     });
-    this.heart = this.add.image(3190, 445, "heart-reliquary").setScale(0.22).setDepth(16);
+    this.heart = this.add
+      .image(3190, this.getSurfaceY(3190) - 100, "heart-reliquary")
+      .setScale(0.22)
+      .setDepth(16);
     this.instruction = this.add
       .text(640, 570, "", {
         fontFamily: FONT_FAMILY,
@@ -269,7 +322,7 @@ export abstract class BaseLevelScene extends Phaser.Scene {
   }
 
   private createExit(): void {
-    const exit = this.physics.add.staticImage(3720, 530, "exit-portal");
+    const exit = this.physics.add.staticImage(3720, this.getSurfaceY(3720) - 100, "exit-portal");
     exit.setScale(0.29).setDepth(15).setVisible(false);
     this.physics.add.overlap(this.player, exit, () => {
       if (this.bossDefeated) this.finishLevel();
@@ -413,7 +466,34 @@ export abstract class BaseLevelScene extends Phaser.Scene {
     this.events.on("trishula-ultimate", (cast: TrishulaCastOrigin) =>
       this.startTrishulaUltimate(cast),
     );
-    this.events.on("enemy-strike", (x: number, y: number) => this.impactVfx(x, y, 0xd6547d));
+    this.events.on("hostile-projectile", (payload: HostileProjectilePayload) =>
+      this.spawnHostileProjectile(payload),
+    );
+    this.events.on(
+      "enemy-telegraph",
+      (payload: {
+        kind: HostileProjectileKind | "melee";
+        x: number;
+        y: number;
+        targetX: number;
+        targetY: number;
+        direction: number;
+        duration: number;
+      }) => this.enemyTelegraphVfx(payload),
+    );
+    this.events.on("enemy-melee-impact", (x: number, y: number, direction: number) =>
+      this.enemyMeleeVfx(x, y, direction),
+    );
+    this.events.on(
+      "boss-telegraph",
+      (x: number, y: number, direction: number, duration: number) =>
+        this.bossTelegraphVfx(x, y, direction, duration),
+    );
+    this.events.on(
+      "projectile-impact",
+      (x: number, y: number, kind: HostileProjectileKind) =>
+        this.projectileImpactVfx(x, y, kind),
+    );
     this.events.on("boss-slam", (x: number, y: number) => {
       this.impactVfx(x, y, 0xffc44f);
       if (saveStore.get().settings.screenShake) this.cameras.main.shake(100, 0.0035);
@@ -459,7 +539,21 @@ export abstract class BaseLevelScene extends Phaser.Scene {
     this.enemies.forEach((enemy) => {
       if (enemy.active && enemy.x > 3000) enemy.disableBody(true, true);
     });
-    this.boss = new Boss(this, 3530, 565, this.level.bossTexture, this.player, this.levelId);
+    const bossX = this.levelId === 1 ? 3690 : this.levelId === 2 ? 3585 : 3530;
+    const bossSurface = getTerrainSurfaceAt(this.levelId, bossX);
+    const bossY =
+      this.levelId === 2 ? this.getSurfaceY(bossX) - 120 : this.getActorSpawnY(bossX);
+    this.boss = new Boss(
+      this,
+      bossX,
+      bossY,
+      this.level.bossTexture,
+      this.player,
+      this.levelId,
+      this.levelId === 2 || !bossSurface
+        ? undefined
+        : { left: bossSurface.x, right: bossSurface.x + bossSurface.width },
+    );
     this.physics.add.collider(this.boss, this.platforms);
     this.bossBarBg.setVisible(true);
     this.bossBar.setVisible(true);
@@ -476,6 +570,7 @@ export abstract class BaseLevelScene extends Phaser.Scene {
 
   private onBossDefeated(): void {
     this.bossDefeated = true;
+    this.clearHostileProjectiles();
     this.bossBarBg.setVisible(false);
     this.bossBar.setVisible(false);
     this.bossLabel.setVisible(false);
@@ -510,6 +605,7 @@ export abstract class BaseLevelScene extends Phaser.Scene {
   private respawn(): void {
     if (!this.player.active || this.completing) return;
     this.player.setActive(false);
+    this.clearHostileProjectiles();
     this.physics.pause();
     this.cameras.main.fadeOut(320, 30, 5, 18);
     this.time.delayedCall(550, () => {
@@ -518,7 +614,7 @@ export abstract class BaseLevelScene extends Phaser.Scene {
         this.bossStarted,
         this.bossDefeated,
       );
-      this.player.setPosition(respawnX, 520);
+      this.player.setPosition(respawnX, this.getActorSpawnY(respawnX));
       this.player.setVelocity(0, 0);
       this.player.healAndRestore();
       this.player.setActive(true);
@@ -636,6 +732,151 @@ export abstract class BaseLevelScene extends Phaser.Scene {
       duration: 300,
       onComplete: () => ring.destroy(),
     });
+  }
+
+  private getSurfaceY(x: number): number {
+    return getTerrainSurfaceY(this.levelId, x) ?? 548;
+  }
+
+  private getActorSpawnY(x: number): number {
+    return this.getSurfaceY(x) - 72;
+  }
+
+  private spawnHostileProjectile(payload: HostileProjectilePayload): void {
+    if (!payload.kind) return;
+    const projectile = new HostileProjectile(
+      this,
+      payload,
+      this.player,
+      this.platforms,
+    );
+    this.hostileProjectiles.add(projectile);
+    audioDirector.play("attack");
+  }
+
+  private updateHostileProjectiles(time: number): void {
+    this.hostileProjectiles.forEach((projectile) => {
+      if (!projectile.active) {
+        this.hostileProjectiles.delete(projectile);
+        return;
+      }
+      projectile.update(time);
+    });
+  }
+
+  private clearHostileProjectiles(): void {
+    this.hostileProjectiles.forEach((projectile) => projectile.destroy());
+    this.hostileProjectiles.clear();
+  }
+
+  private enemyTelegraphVfx(payload: {
+    kind: HostileProjectileKind | "melee";
+    x: number;
+    y: number;
+    targetX: number;
+    targetY: number;
+    direction: number;
+    duration: number;
+  }): void {
+    const color =
+      payload.kind === "arrow"
+        ? 0xffc767
+        : payload.kind === "mage-orb"
+          ? 0x79ff65
+          : payload.kind === "bat-bolt"
+            ? 0x79cfff
+            : 0xff745f;
+    if (payload.kind === "melee") {
+      const warning = this.add
+        .rectangle(payload.x, payload.y + 12, 118, 138, color, 0.12)
+        .setStrokeStyle(3, color, 0.82)
+        .setDepth(29)
+        .setScale(0.75);
+      this.tweens.add({
+        targets: warning,
+        scale: 1,
+        alpha: 0,
+        duration: payload.duration,
+        ease: "Quad.easeIn",
+        onComplete: () => warning.destroy(),
+      });
+      return;
+    }
+
+    const guide = this.add.graphics().setDepth(29);
+    guide.lineStyle(payload.kind === "arrow" ? 2 : 3, color, 0.62);
+    guide.lineBetween(payload.x, payload.y, payload.targetX, payload.targetY);
+    const pulse = this.add
+      .circle(payload.x, payload.y, 14, color, 0.15)
+      .setStrokeStyle(3, color, 0.9)
+      .setDepth(30);
+    this.tweens.add({
+      targets: pulse,
+      scale: 2.1,
+      alpha: 0,
+      duration: payload.duration,
+      onComplete: () => pulse.destroy(),
+    });
+    this.tweens.add({
+      targets: guide,
+      alpha: 0,
+      duration: payload.duration,
+      onComplete: () => guide.destroy(),
+    });
+  }
+
+  private bossTelegraphVfx(
+    x: number,
+    y: number,
+    direction: number,
+    duration: number,
+  ): void {
+    const warning = this.add
+      .ellipse(x + direction * 92, y - 18, 250, 86, 0xff5e52, 0.12)
+      .setStrokeStyle(4, 0xffcc65, 0.92)
+      .setDepth(30)
+      .setScale(0.58);
+    this.tweens.add({
+      targets: warning,
+      scaleX: 1,
+      scaleY: 1,
+      alpha: 0,
+      duration,
+      ease: "Cubic.easeIn",
+      onComplete: () => warning.destroy(),
+    });
+  }
+
+  private enemyMeleeVfx(x: number, y: number, direction: number): void {
+    const slash = this.add
+      .ellipse(x, y, 76, 128, 0xffc96b, 0)
+      .setStrokeStyle(8, 0xffd37e, 0.88)
+      .setDepth(31)
+      .setAngle(direction < 0 ? -28 : 28)
+      .setScale(0.55);
+    this.tweens.add({
+      targets: slash,
+      scale: 1.25,
+      alpha: 0,
+      duration: 220,
+      onComplete: () => slash.destroy(),
+    });
+  }
+
+  private projectileImpactVfx(
+    x: number,
+    y: number,
+    kind: HostileProjectileKind,
+  ): void {
+    const color =
+      kind === "arrow"
+        ? 0xffc567
+        : kind === "mage-orb"
+          ? 0x6dff68
+          : kind === "bat-bolt"
+            ? 0x6ccfff
+            : 0xffd068;
+    this.impactVfx(x, y, color);
   }
 
   private startTrishulaUltimate(cast: TrishulaCastOrigin): void {

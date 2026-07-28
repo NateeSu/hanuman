@@ -72,3 +72,16 @@ Raw generated/chroma files are intentionally excluded from version control.
 | `public/assets/ui/vfx/trishula-ultimate.png` | Returning circular ultimate projectile | 1776×887 | 1755×443 PNG | yes | `prompts/trishula-ultimate.md` |
 
 The generated chroma-key source is converted to alpha, tightly trimmed, and padded by 24 pixels. Circular sigils, weapon afterimages, sparks, impact rings, and the homing return path are rendered procedurally in Phaser around this production sprite.
+
+## Hostile projectiles
+
+Runtime directory: `public/assets/projectiles/`
+
+| File | Source enemy | Purpose | Transparency |
+|---|---|---|---|
+| `yak-arrow.png` | Yak archer | Fast physical arrow with a visible aim line | yes |
+| `mage-orb.png` | Shadow Mage | Slower green cursed orb | yes |
+| `bat-bolt.png` | Bat Spirit | Mid-speed blue-violet crescent bolt | yes |
+| `boss-wave.png` | Bosses / Maiyarap palette | Ground-hugging jumpable shockwave | yes |
+
+Prompt: `prompts/hostile-projectiles.md`. All four assets were generated separately with the built-in Image Generation tool, converted from a flat magenta chroma key to alpha, trimmed, resized for runtime use, and padded by 16 pixels.

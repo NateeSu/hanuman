@@ -57,6 +57,10 @@ export class PreloadScene extends Phaser.Scene {
     );
     objects.forEach((name) => this.load.image(name, `/assets/ui/objects/${name}.png`));
     this.load.image("trishula-ultimate", "/assets/ui/vfx/trishula-ultimate.png");
+    this.load.image("projectile-arrow", "/assets/projectiles/yak-arrow.png");
+    this.load.image("projectile-mage-orb", "/assets/projectiles/mage-orb.png");
+    this.load.image("projectile-bat-bolt", "/assets/projectiles/bat-bolt.png");
+    this.load.image("projectile-boss-wave", "/assets/projectiles/boss-wave.png");
 
     const barBg = this.add
       .rectangle(640, 650, 430, 8, 0x172039, 0.9)

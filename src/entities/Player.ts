@@ -1,6 +1,11 @@
 import Phaser from "phaser";
 import { audioDirector } from "../audio/AudioDirector";
 import { touchInput } from "../systems/touchInput";
+import {
+  TRISHULA_TOTAL_MS,
+  TRISHULA_WIND_COST,
+  type TrishulaCastOrigin,
+} from "../systems/trishulaUltimate";
 
 export interface PlayerStats {
   health: number;
@@ -18,6 +23,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private dashReadyAt = 0;
   private dashEndsAt = 0;
   private attackingUntil = 0;
+  private ultimateReadyAt = 0;
   private invulnerableUntil = 0;
   private runFrame = false;
   private lastRunFrameAt = 0;
@@ -105,7 +111,13 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
     if (dashPressed && time >= this.dashReadyAt) this.dash(time);
     if (attackPressed && time >= this.attackingUntil) this.attack(time);
-    if (skillPressed && this.stats.wind >= 35) this.skill(time);
+    if (
+      skillPressed &&
+      this.stats.wind >= TRISHULA_WIND_COST &&
+      time >= this.ultimateReadyAt
+    ) {
+      this.skill(time);
+    }
 
     if (time >= this.attackingUntil) this.updateTexture(time, grounded);
   }
@@ -144,12 +156,19 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   }
 
   private skill(time: number): void {
-    this.stats.wind -= 35;
-    this.attackingUntil = time + 440;
-    this.setTexture("hanuman-victory");
-    audioDirector.play("dash");
-    this.scene.events.emit("player-attack", this.x, this.y - 45, 50, true);
-    this.scene.events.emit("wind-vfx", this.x, this.y - 30, 0x8af6ff);
+    const direction = this.flipX ? -1 : 1;
+    const cast: TrishulaCastOrigin = {
+      x: this.x + direction * 42,
+      y: this.y - 82,
+      direction,
+    };
+    this.stats.wind -= TRISHULA_WIND_COST;
+    this.attackingUntil = time + 520;
+    this.ultimateReadyAt = time + TRISHULA_TOTAL_MS + 300;
+    this.setTexture("hanuman-heavy");
+    audioDirector.play("ultimate");
+    this.scene.events.emit("trishula-ultimate", cast);
+    this.scene.events.emit("wind-vfx", cast.x, cast.y, 0xf6cf63);
     this.emitStats();
   }
 

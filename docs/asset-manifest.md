@@ -64,3 +64,11 @@ Objects: Rama seal, checkpoint, dash wall, sleep mist urn, heart reliquary, hear
 5. WebP background compression.
 
 Raw generated/chroma files are intentionally excluded from version control.
+
+## Trishula ultimate
+
+| Runtime path | Purpose | Source resolution | Final | Transparency | Prompt |
+|---|---|---:|---:|---|---|
+| `public/assets/ui/vfx/trishula-ultimate.png` | Returning circular ultimate projectile | 1776×887 | 1755×443 PNG | yes | `prompts/trishula-ultimate.md` |
+
+The generated chroma-key source is converted to alpha, tightly trimmed, and padded by 24 pixels. Circular sigils, weapon afterimages, sparks, impact rings, and the homing return path are rendered procedurally in Phaser around this production sprite.

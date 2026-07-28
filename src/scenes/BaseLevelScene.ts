@@ -8,10 +8,27 @@ import type { LevelDefinition } from "../data/types";
 import { saveStore } from "../storage/saveStore";
 import { BOSS_ARENA, resolveRespawnX } from "../systems/bossArena";
 import { touchInput } from "../systems/touchInput";
+import {
+  TRISHULA_RADIUS_X,
+  TRISHULA_RADIUS_Y,
+  getTrishulaPosition,
+  type TrishulaCastOrigin,
+} from "../systems/trishulaUltimate";
 import { FONT_FAMILY } from "../ui/components";
 
 const WORLD_WIDTH = 3840;
 const FLOOR_Y = 650;
+
+interface TrishulaRuntime {
+  sprite: Phaser.GameObjects.Image;
+  aura: Phaser.GameObjects.Image;
+  sigil: Phaser.GameObjects.Ellipse;
+  cast: TrishulaCastOrigin;
+  startedAt: number;
+  lastTrailAt: number;
+  lastRelicHitAt: number;
+  hitTargets: Set<Enemy | Boss>;
+}
 
 export abstract class BaseLevelScene extends Phaser.Scene {
   protected abstract readonly levelId: 1 | 2 | 3;
@@ -36,6 +53,7 @@ export abstract class BaseLevelScene extends Phaser.Scene {
   private heartSeals: Phaser.GameObjects.Image[] = [];
   private heart?: Phaser.GameObjects.Image;
   private heartHits = 0;
+  private trishula?: TrishulaRuntime;
   private readonly pauseHandler = () => this.pauseGame();
 
   create(): void {
@@ -89,6 +107,7 @@ export abstract class BaseLevelScene extends Phaser.Scene {
     this.player.update(time);
     this.enemies.forEach((enemy) => enemy.update(time));
     this.boss?.update(time);
+    this.updateTrishulaUltimate(time);
     if (!this.bossStarted && this.player.x > 3190 && (this.levelId < 3 || this.heartHits >= 3)) {
       this.startBoss();
     }
@@ -265,9 +284,9 @@ export abstract class BaseLevelScene extends Phaser.Scene {
     const lang = saveStore.get().settings.language;
     const panel = this.add.graphics().setScrollFactor(0).setDepth(50);
     panel.fillStyle(0x070a17, 0.82);
-    panel.fillRoundedRect(22, 20, 390, 92, 12);
+    panel.fillRoundedRect(22, 20, 390, 122, 12);
     panel.lineStyle(2, 0xd8ad58, 0.66);
-    panel.strokeRoundedRect(22, 20, 390, 92, 12);
+    panel.strokeRoundedRect(22, 20, 390, 122, 12);
     this.add
       .text(42, 36, "HP", {
         fontFamily: FONT_FAMILY,
@@ -290,6 +309,21 @@ export abstract class BaseLevelScene extends Phaser.Scene {
     this.hpBar = this.add.rectangle(100, 48, 286, 14, 0xe95e66, 1).setOrigin(0, 0.5).setScrollFactor(0).setDepth(52);
     this.add.rectangle(100, 87, 286, 12, 0x082330, 0.9).setOrigin(0, 0.5).setScrollFactor(0).setDepth(51);
     this.windBar = this.add.rectangle(100, 87, 200, 8, 0x57dff5, 1).setOrigin(0, 0.5).setScrollFactor(0).setDepth(52);
+    this.add
+      .image(69, 120, "trishula-ultimate")
+      .setDisplaySize(70, 18)
+      .setScrollFactor(0)
+      .setDepth(52);
+    this.add
+      .text(112, 120, "K  ตรีศูลวายุ  •  35", {
+        fontFamily: FONT_FAMILY,
+        fontSize: "14px",
+        fontStyle: "bold",
+        color: "#ffe09a",
+      })
+      .setOrigin(0, 0.5)
+      .setScrollFactor(0)
+      .setDepth(52);
     this.add.image(450, 56, "rama-seal").setScale(0.085).setScrollFactor(0).setDepth(52);
     this.collectibleText = this.add
       .text(490, 56, `${this.collected.size}/3`, {
@@ -376,6 +410,9 @@ export abstract class BaseLevelScene extends Phaser.Scene {
       if (this.levelId === 3) this.hitHeartSequence(range);
     });
     this.events.on("wind-vfx", (x: number, y: number, color: number) => this.windVfx(x, y, color));
+    this.events.on("trishula-ultimate", (cast: TrishulaCastOrigin) =>
+      this.startTrishulaUltimate(cast),
+    );
     this.events.on("enemy-strike", (x: number, y: number) => this.impactVfx(x, y, 0xd6547d));
     this.events.on("boss-slam", (x: number, y: number) => {
       this.impactVfx(x, y, 0xffc44f);
@@ -541,7 +578,9 @@ export abstract class BaseLevelScene extends Phaser.Scene {
         onComplete: () => [shade, chapter, title, story].forEach((item) => item.destroy()),
       });
       if (this.levelId === 1) {
-        this.instruction.setText("A/D หรือ ◀ ▶ เคลื่อนที่ · SPACE/กระโดด · J/โจมตี");
+        this.instruction.setText(
+          "A/D หรือ ◀ ▶ เคลื่อนที่ · SPACE/กระโดด · J/โจมตี · K/ตรีศูลวายุ",
+        );
         this.time.delayedCall(5000, () => this.instruction.setText(""));
       }
     });
@@ -597,5 +636,188 @@ export abstract class BaseLevelScene extends Phaser.Scene {
       duration: 300,
       onComplete: () => ring.destroy(),
     });
+  }
+
+  private startTrishulaUltimate(cast: TrishulaCastOrigin): void {
+    if (this.trishula) return;
+
+    const sigil = this.add
+      .ellipse(
+        cast.x + cast.direction * TRISHULA_RADIUS_X,
+        cast.y,
+        TRISHULA_RADIUS_X * 2,
+        TRISHULA_RADIUS_Y * 2,
+        0x67e8ff,
+        0.025,
+      )
+      .setStrokeStyle(3, 0xf8d36b, 0.5)
+      .setDepth(28)
+      .setScale(0.78)
+      .setAlpha(0);
+    this.tweens.add({
+      targets: sigil,
+      scale: 1,
+      alpha: 0.55,
+      duration: 220,
+      yoyo: true,
+      hold: 520,
+    });
+
+    const aura = this.add
+      .image(cast.x, cast.y, "trishula-ultimate")
+      .setDisplaySize(282, 71)
+      .setDepth(34)
+      .setTint(0x72eaff)
+      .setAlpha(0.36)
+      .setBlendMode(Phaser.BlendModes.ADD)
+      .setFlipX(cast.direction < 0);
+    const sprite = this.add
+      .image(cast.x, cast.y, "trishula-ultimate")
+      .setDisplaySize(254, 64)
+      .setDepth(36)
+      .setFlipX(cast.direction < 0);
+
+    this.trishula = {
+      sprite,
+      aura,
+      sigil,
+      cast,
+      startedAt: this.time.now,
+      lastTrailAt: -9999,
+      lastRelicHitAt: -9999,
+      hitTargets: new Set(),
+    };
+
+    this.flashMessage("ตรีศูลวายุ • DIVINE TRISHULA", 0xffdc78, 680);
+    this.castTrishulaBurst(cast.x, cast.y);
+    if (saveStore.get().settings.screenShake) this.cameras.main.shake(110, 0.0028);
+  }
+
+  private updateTrishulaUltimate(time: number): void {
+    const runtime = this.trishula;
+    if (!runtime) return;
+
+    const elapsed = time - runtime.startedAt;
+    const position = getTrishulaPosition(elapsed, runtime.cast, {
+      x: this.player.x,
+      y: this.player.y,
+    });
+    const rotation = runtime.cast.direction * elapsed * 0.019;
+    runtime.sprite.setPosition(position.x, position.y).setRotation(rotation);
+    runtime.aura
+      .setPosition(position.x, position.y)
+      .setRotation(rotation)
+      .setAlpha(0.24 + Math.sin(elapsed * 0.035) * 0.1);
+
+    const trailInterval = saveStore.get().settings.quality === "low" ? 88 : 48;
+    if (time - runtime.lastTrailAt >= trailInterval) {
+      runtime.lastTrailAt = time;
+      this.spawnTrishulaTrail(position.x, position.y, rotation, runtime.cast.direction < 0);
+    }
+
+    const hitbox = new Phaser.Geom.Rectangle(position.x - 82, position.y - 62, 164, 124);
+    this.enemies.forEach((enemy) => {
+      if (
+        enemy.active &&
+        !runtime.hitTargets.has(enemy) &&
+        Phaser.Geom.Intersects.RectangleToRectangle(hitbox, enemy.getBounds())
+      ) {
+        runtime.hitTargets.add(enemy);
+        enemy.hit(70, this.player.x);
+        this.impactVfx(enemy.x, enemy.y - 55, 0xffdc72);
+      }
+    });
+    if (
+      this.boss?.active &&
+      !runtime.hitTargets.has(this.boss) &&
+      Phaser.Geom.Intersects.RectangleToRectangle(hitbox, this.boss.getBounds())
+    ) {
+      runtime.hitTargets.add(this.boss);
+      this.boss.hit(48, this.player.x);
+      this.impactVfx(this.boss.x, this.boss.y - 80, 0x7cecff);
+    }
+    if (this.levelId === 3 && time - runtime.lastRelicHitAt > 150) {
+      runtime.lastRelicHitAt = time;
+      this.hitHeartSequence(hitbox);
+    }
+
+    if (position.phase === "return" && runtime.sigil.alpha > 0) {
+      runtime.sigil.setAlpha(Math.max(0, runtime.sigil.alpha - 0.04));
+    }
+    if (position.phase === "complete") this.finishTrishulaUltimate();
+  }
+
+  private spawnTrishulaTrail(
+    x: number,
+    y: number,
+    rotation: number,
+    flipped: boolean,
+  ): void {
+    const afterimage = this.add
+      .image(x, y, "trishula-ultimate")
+      .setDisplaySize(238, 60)
+      .setDepth(32)
+      .setRotation(rotation)
+      .setFlipX(flipped)
+      .setTint(0x7cecff)
+      .setAlpha(0.25)
+      .setBlendMode(Phaser.BlendModes.ADD);
+    const targetScaleX = afterimage.scaleX * 0.8;
+    const targetScaleY = afterimage.scaleY * 0.8;
+    this.tweens.add({
+      targets: afterimage,
+      alpha: 0,
+      scaleX: targetScaleX,
+      scaleY: targetScaleY,
+      duration: 230,
+      ease: "Quad.easeOut",
+      onComplete: () => afterimage.destroy(),
+    });
+
+    const spark = this.add
+      .star(x, y, 4, 2, 7, 0xffe39a, 0.9)
+      .setDepth(35)
+      .setRotation(rotation);
+    this.tweens.add({
+      targets: spark,
+      x: x + Phaser.Math.Between(-42, 42),
+      y: y + Phaser.Math.Between(-34, 34),
+      angle: spark.angle + 120,
+      alpha: 0,
+      scale: 0.2,
+      duration: 260,
+      onComplete: () => spark.destroy(),
+    });
+  }
+
+  private castTrishulaBurst(x: number, y: number): void {
+    const ring = this.add
+      .circle(x, y, 24, 0x67e8ff, 0.06)
+      .setStrokeStyle(6, 0xffd86b, 0.95)
+      .setDepth(37);
+    this.tweens.add({
+      targets: ring,
+      scale: 4.8,
+      alpha: 0,
+      duration: 420,
+      ease: "Cubic.easeOut",
+      onComplete: () => ring.destroy(),
+    });
+    this.windVfx(x, y, 0xffdf7d);
+    this.windVfx(x, y, 0x68eaff);
+  }
+
+  private finishTrishulaUltimate(): void {
+    const runtime = this.trishula;
+    if (!runtime) return;
+    const catchX = this.player.x + runtime.cast.direction * 24;
+    const catchY = this.player.y - 76;
+    runtime.sprite.destroy();
+    runtime.aura.destroy();
+    runtime.sigil.destroy();
+    this.trishula = undefined;
+    this.castTrishulaBurst(catchX, catchY);
+    audioDirector.play("checkpoint");
+    if (saveStore.get().settings.screenShake) this.cameras.main.shake(90, 0.002);
   }
 }

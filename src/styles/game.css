@@ -89,6 +89,22 @@ canvas {
   box-shadow: 0 0 22px rgb(86 230 255 / 65%);
 }
 
+#touch-controls button.ultimate-button {
+  border-color: rgb(255 218 116 / 92%);
+  background:
+    radial-gradient(circle at 50% 35%, rgb(255 224 121 / 38%), transparent 48%),
+    linear-gradient(145deg, rgb(86 48 22 / 88%), rgb(9 15 34 / 90%));
+  color: #fff1b8;
+  box-shadow:
+    inset 0 0 16px rgb(255 214 92 / 22%),
+    0 0 18px rgb(86 230 255 / 18%);
+}
+
+#touch-controls button.ultimate-button.active {
+  background: rgb(164 106 28 / 82%);
+  box-shadow: 0 0 26px rgb(255 219 105 / 76%);
+}
+
 #orientation-overlay,
 #fatal-error {
   position: fixed;

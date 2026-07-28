@@ -27,7 +27,17 @@ class AudioDirector {
     this.musicBus.gain.value = musicVolume * 0.035;
   }
 
-  play(kind: "jump" | "attack" | "dash" | "hit" | "collect" | "checkpoint" | "victory"): void {
+  play(
+    kind:
+      | "jump"
+      | "attack"
+      | "dash"
+      | "hit"
+      | "collect"
+      | "checkpoint"
+      | "victory"
+      | "ultimate",
+  ): void {
     this.unlock();
     if (!this.context || !this.sfxBus) return;
     const frequencies = {
@@ -38,6 +48,7 @@ class AudioDirector {
       collect: [540, 880],
       checkpoint: [330, 660],
       victory: [392, 523],
+      ultimate: [220, 980],
     } as const;
     const [start, end] = frequencies[kind];
     const oscillator = this.context.createOscillator();
@@ -46,7 +57,7 @@ class AudioDirector {
     oscillator.frequency.setValueAtTime(start, this.context.currentTime);
     oscillator.frequency.exponentialRampToValueAtTime(
       end,
-      this.context.currentTime + (kind === "victory" ? 0.32 : 0.11),
+      this.context.currentTime + (kind === "victory" || kind === "ultimate" ? 0.32 : 0.11),
     );
     gain.gain.setValueAtTime(0.8, this.context.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.001, this.context.currentTime + 0.35);

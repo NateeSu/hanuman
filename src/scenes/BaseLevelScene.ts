@@ -17,6 +17,11 @@ import {
 import type { LevelDefinition } from "../data/types";
 import { saveStore } from "../storage/saveStore";
 import { BOSS_ARENA, resolveRespawnX } from "../systems/bossArena";
+import {
+  getHazardPresentation,
+  type HazardPresentation,
+  type HazardTexture,
+} from "../systems/hazardPresentation";
 import { touchInput } from "../systems/touchInput";
 import {
   TRISHULA_RADIUS_X,
@@ -276,16 +281,150 @@ export abstract class BaseLevelScene extends Phaser.Scene {
           ? [880, 2180]
           : [980, 2220, 2860];
     positions.forEach((x, index) => {
-      const texture = this.levelId === 1 && index === 0 ? "sleep-mist" : "blade-trap";
-      const hazard = this.physics.add.staticImage(x, this.getSurfaceY(x) - 36, texture);
-      hazard.setScale(texture === "sleep-mist" ? 0.18 : 0.16).setDepth(16);
+      const texture: HazardTexture =
+        this.levelId === 1 && index === 0 ? "sleep-mist" : "blade-trap";
+      const presentation = getHazardPresentation(texture);
+      const surfaceY = this.getSurfaceY(x);
+      const hazard = this.physics.add.staticImage(
+        x,
+        surfaceY - presentation.displayHeight / 2,
+        texture,
+      );
+      hazard
+        .setDisplaySize(presentation.displayWidth, presentation.displayHeight)
+        .setDepth(16)
+        .refreshBody();
+      (hazard.body as Phaser.Physics.Arcade.StaticBody).setSize(
+        presentation.hitboxWidth,
+        presentation.hitboxHeight,
+        true,
+      );
+      this.createHazardTelegraph(x, surfaceY, texture, presentation);
       if (texture === "blade-trap") {
         this.tweens.add({ targets: hazard, angle: 360, duration: 2600, repeat: -1 });
       } else {
         this.tweens.add({ targets: hazard, alpha: 0.55, duration: 900, yoyo: true, repeat: -1 });
       }
-      this.physics.add.overlap(this.player, hazard, () => this.player.takeDamage(12, hazard.x));
+      this.physics.add.overlap(this.player, hazard, () => {
+        if (this.player.takeDamage(presentation.damage, hazard.x)) {
+          this.hazardDamageVfx(presentation.damage, presentation.color);
+        }
+      });
     });
+  }
+
+  private createHazardTelegraph(
+    x: number,
+    surfaceY: number,
+    texture: HazardTexture,
+    presentation: HazardPresentation,
+  ): void {
+    const warning = this.add
+      .ellipse(
+        x,
+        surfaceY - 7,
+        presentation.telegraphWidth,
+        presentation.telegraphHeight,
+        presentation.color,
+        0.18,
+      )
+      .setStrokeStyle(3, presentation.color, 0.88)
+      .setDepth(14);
+    const aura = this.add
+      .image(
+        x,
+        surfaceY - presentation.displayHeight / 2,
+        texture,
+      )
+      .setDisplaySize(
+        presentation.displayWidth * 1.34,
+        presentation.displayHeight * 1.34,
+      )
+      .setTint(presentation.color)
+      .setAlpha(0.22)
+      .setBlendMode(Phaser.BlendModes.ADD)
+      .setDepth(15);
+
+    this.tweens.add({
+      targets: warning,
+      scaleX: 1.14,
+      scaleY: 1.24,
+      alpha: 0.34,
+      duration: 760,
+      ease: "Sine.easeInOut",
+      yoyo: true,
+      repeat: -1,
+    });
+    this.tweens.add({
+      targets: aura,
+      scaleX: aura.scaleX * 1.12,
+      scaleY: aura.scaleY * 1.12,
+      alpha: 0.08,
+      angle: texture === "blade-trap" ? -360 : 0,
+      duration: texture === "blade-trap" ? 3100 : 980,
+      ease: "Sine.easeInOut",
+      yoyo: texture !== "blade-trap",
+      repeat: -1,
+    });
+
+    for (let index = 0; index < 5; index += 1) {
+      const mote = this.add
+        .circle(
+          x + Phaser.Math.Between(-52, 52),
+          surfaceY - Phaser.Math.Between(8, 42),
+          Phaser.Math.Between(2, 5),
+          presentation.color,
+          0.72,
+        )
+        .setBlendMode(Phaser.BlendModes.ADD)
+        .setDepth(17);
+      this.tweens.add({
+        targets: mote,
+        y: mote.y - Phaser.Math.Between(48, 92),
+        x: mote.x + Phaser.Math.Between(-18, 18),
+        alpha: 0,
+        scale: 0.25,
+        duration: Phaser.Math.Between(920, 1480),
+        delay: index * 190,
+        repeat: -1,
+      });
+    }
+  }
+
+  private hazardDamageVfx(damage: number, color: number): void {
+    const x = this.player.x;
+    const y = this.player.y - 58;
+    this.impactVfx(x, y, color);
+    this.windVfx(x, y, color);
+    const warningBanner = this.add
+      .container(640, 166)
+      .setScrollFactor(0)
+      .setDepth(60);
+    const warningPanel = this.add
+      .rectangle(0, 0, 270, 50, 0x26050b, 0.9)
+      .setStrokeStyle(2, color, 0.98);
+    const damageText = this.add
+      .text(0, 0, `อันตราย  -${damage} HP`, {
+        fontFamily: FONT_FAMILY,
+        fontSize: "24px",
+        fontStyle: "bold",
+        color: "#fff7df",
+        stroke: "#260006",
+        strokeThickness: 7,
+      })
+      .setOrigin(0.5);
+    warningBanner.add([warningPanel, damageText]);
+    this.tweens.add({
+      targets: warningBanner,
+      y: warningBanner.y - 28,
+      alpha: 0,
+      scale: 1.08,
+      delay: 650,
+      duration: 700,
+      ease: "Quad.easeOut",
+      onComplete: () => warningBanner.destroy(),
+    });
+    this.cameras.main.flash(90, 128, 12, 18, false);
   }
 
   private spawnHeartSequence(): void {

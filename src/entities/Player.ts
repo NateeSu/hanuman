@@ -172,9 +172,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.emitStats();
   }
 
-  takeDamage(amount: number, sourceX: number): void {
+  takeDamage(amount: number, sourceX: number): boolean {
     const now = this.scene.time.now;
-    if (now < this.invulnerableUntil) return;
+    if (now < this.invulnerableUntil) return false;
     this.invulnerableUntil = now + 900;
     this.stats.health = Math.max(0, this.stats.health - amount);
     this.stats.damageTaken += amount;
@@ -186,6 +186,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     audioDirector.play("hit");
     this.emitStats();
     if (this.stats.health <= 0) this.scene.events.emit("player-defeated");
+    return true;
   }
 
   healAndRestore(): void {

@@ -5,11 +5,38 @@ import type { Player } from "./Player";
 
 export type EnemyKind = "yak-guard" | "yak-archer" | "bat-spirit" | "shadow-mage";
 
-const enemyConfig: Record<EnemyKind, { health: number; speed: number; damage: number; scale: number }> = {
-  "yak-guard": { health: 55, speed: 75, damage: 12, scale: 0.28 },
-  "yak-archer": { health: 42, speed: 48, damage: 10, scale: 0.27 },
-  "bat-spirit": { health: 28, speed: 95, damage: 8, scale: 0.23 },
-  "shadow-mage": { health: 48, speed: 58, damage: 14, scale: 0.25 },
+const enemyConfig: Record<
+  EnemyKind,
+  { health: number; speed: number; damage: number; scale: number; glow: number }
+> = {
+  "yak-guard": {
+    health: 55,
+    speed: 75,
+    damage: 12,
+    scale: 0.28,
+    glow: 0xffbd68,
+  },
+  "yak-archer": {
+    health: 42,
+    speed: 48,
+    damage: 10,
+    scale: 0.27,
+    glow: 0xffdd78,
+  },
+  "bat-spirit": {
+    health: 28,
+    speed: 95,
+    damage: 8,
+    scale: 0.23,
+    glow: 0x79d8ff,
+  },
+  "shadow-mage": {
+    health: 48,
+    speed: 58,
+    damage: 14,
+    scale: 0.25,
+    glow: 0x8dff72,
+  },
 };
 
 export class Enemy extends Phaser.Physics.Arcade.Sprite {
@@ -19,6 +46,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   private readonly config: (typeof enemyConfig)[EnemyKind];
   private nextAttackAt = 0;
   private spawnX: number;
+  private readonly aura: Phaser.GameObjects.Image;
 
   constructor(
     scene: Phaser.Scene,
@@ -39,17 +67,37 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.setScale(this.config.scale);
     this.setOrigin(0.5, 0.9);
     this.setDepth(18);
+    this.aura = scene.add
+      .image(x, y, kind)
+      .setScale(this.config.scale * 1.1)
+      .setOrigin(0.5, 0.9)
+      .setDepth(17)
+      .setTintFill(this.config.glow)
+      .setAlpha(0.18)
+      .setBlendMode(Phaser.BlendModes.ADD);
+    scene.tweens.add({
+      targets: this.aura,
+      alpha: 0.08,
+      duration: 720,
+      yoyo: true,
+      repeat: -1,
+      ease: "Sine.easeInOut",
+    });
     const body = this.body as Phaser.Physics.Arcade.Body;
     body.setSize(Math.min(this.width * 0.48, 145), Math.min(this.height * 0.72, 245));
     body.setOffset((this.width - body.width) / 2, this.height - body.height);
     if (kind === "bat-spirit") {
       body.setAllowGravity(false);
       this.y -= 90;
+      this.aura.y = this.y;
     }
   }
 
   update(time: number): void {
-    if (!this.active || !this.body) return;
+    if (!this.active || !this.body) {
+      this.aura.setVisible(false);
+      return;
+    }
     const body = this.body as Phaser.Physics.Arcade.Body;
     const distance = this.player.x - this.x;
     const range =
@@ -61,6 +109,10 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
             ? 300
             : 95;
     this.setFlipX(distance > 0);
+    this.aura
+      .setPosition(this.x, this.y)
+      .setFlipX(this.flipX)
+      .setVisible(this.visible);
 
     if (Math.abs(distance) > 560) {
       body.setVelocityX(0);
@@ -171,6 +223,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     audioDirector.play("hit");
     if (this.health <= 0) {
       this.scene.events.emit("enemy-defeated", this.x, this.y, this.kind);
+      this.aura.destroy();
       this.disableBody(true, true);
     }
   }

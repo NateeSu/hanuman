@@ -1,4 +1,5 @@
 import Phaser from "phaser";
+import { LEVEL_COUNT } from "../data/levels";
 import { FONT_FAMILY } from "../ui/components";
 
 const hanumanPoses = [
@@ -25,7 +26,22 @@ const roster = [
   "yak-archer",
   "bat-spirit",
   "shadow-mage",
+  "khotchasan",
+  "akkhani",
+  "masaka",
+  "than-lek",
 ];
+
+const bossPoseTextures = [
+  "gatekeeper",
+  "khotchasan",
+  "akkhani",
+  "masaka",
+  "matchanu",
+  "than-lek",
+  "maiyarap",
+];
+const bossPoses = ["idle", "cast", "strike"];
 
 const objects = [
   "rama-seal",
@@ -46,14 +62,28 @@ export class PreloadScene extends Phaser.Scene {
   preload(): void {
     this.load.image("poster", "/assets/poster/opening-poster.webp");
     this.load.once("filecomplete-image-poster", () => this.showPoster());
-    this.load.image("level-01", "/assets/levels/level-01/background.webp");
-    this.load.image("level-02", "/assets/levels/level-02/background.webp");
-    this.load.image("level-03", "/assets/levels/level-03/background.webp");
+    Array.from({ length: LEVEL_COUNT }, (_, index) => index + 1).forEach(
+      (levelId) => {
+        const paddedId = levelId.toString().padStart(2, "0");
+        this.load.image(
+          `level-${paddedId}`,
+          `/assets/levels/level-${paddedId}/background.webp`,
+        );
+      },
+    );
     hanumanPoses.forEach((pose) =>
       this.load.image(`hanuman-${pose}`, `/assets/characters/hanuman/poses/${pose}.png`),
     );
     roster.forEach((name) =>
       this.load.image(name, `/assets/characters/roster/poses/${name}.png`),
+    );
+    bossPoseTextures.forEach((name) =>
+      bossPoses.forEach((pose) =>
+        this.load.image(
+          `${name}-${pose}`,
+          `/assets/characters/roster/poses/${name}-${pose}.webp`,
+        ),
+      ),
     );
     objects.forEach((name) => this.load.image(name, `/assets/ui/objects/${name}.png`));
     this.load.image("trishula-ultimate", "/assets/ui/vfx/trishula-ultimate.png");
@@ -61,6 +91,31 @@ export class PreloadScene extends Phaser.Scene {
     this.load.image("projectile-mage-orb", "/assets/projectiles/mage-orb.png");
     this.load.image("projectile-bat-bolt", "/assets/projectiles/bat-bolt.png");
     this.load.image("projectile-boss-wave", "/assets/projectiles/boss-wave.png");
+    this.load.image(
+      "projectile-shield-disc",
+      "/assets/projectiles/shield-disc.png",
+    );
+    this.load.image("projectile-tusk-wave", "/assets/projectiles/tusk-wave.png");
+    this.load.image(
+      "projectile-magma-boulder",
+      "/assets/projectiles/magma-boulder.png",
+    );
+    this.load.image(
+      "projectile-lotus-stinger",
+      "/assets/projectiles/lotus-stinger.png",
+    );
+    this.load.image(
+      "projectile-chain-sigil",
+      "/assets/projectiles/chain-sigil.png",
+    );
+    this.load.image(
+      "projectile-tidal-trident",
+      "/assets/projectiles/tidal-trident.png",
+    );
+    this.load.image(
+      "projectile-hypnosis-orb",
+      "/assets/projectiles/hypnosis-orb.png",
+    );
 
     const barBg = this.add
       .rectangle(640, 650, 430, 8, 0x172039, 0.9)
@@ -87,7 +142,10 @@ export class PreloadScene extends Phaser.Scene {
           ? new URLSearchParams(window.location.search).get("level")
           : null;
         const target =
-          requestedLevel && ["1", "2", "3"].includes(requestedLevel)
+          requestedLevel &&
+          Array.from({ length: LEVEL_COUNT }, (_, index) =>
+            String(index + 1),
+          ).includes(requestedLevel)
             ? `Level0${requestedLevel}Scene`
             : "MainMenuScene";
         this.scene.start(target);

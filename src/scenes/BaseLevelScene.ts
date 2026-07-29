@@ -8,13 +8,14 @@ import {
   type HostileProjectilePayload,
 } from "../entities/HostileProjectile";
 import { Player } from "../entities/Player";
+import { bossProfileFor } from "../data/bosses";
 import { levelById } from "../data/levels";
 import {
   getTerrainPlatforms,
   getTerrainSurfaceAt,
   getTerrainSurfaceY,
 } from "../data/terrain";
-import type { LevelDefinition } from "../data/types";
+import type { LevelDefinition, LevelId } from "../data/types";
 import { saveStore } from "../storage/saveStore";
 import { BOSS_ARENA, resolveRespawnX } from "../systems/bossArena";
 import {
@@ -22,6 +23,7 @@ import {
   type HazardPresentation,
   type HazardTexture,
 } from "../systems/hazardPresentation";
+import type { NormalAttackPayload } from "../systems/playerAttack";
 import { touchInput } from "../systems/touchInput";
 import {
   TRISHULA_RADIUS_X,
@@ -44,7 +46,7 @@ interface TrishulaRuntime {
 }
 
 export abstract class BaseLevelScene extends Phaser.Scene {
-  protected abstract readonly levelId: 1 | 2 | 3;
+  protected abstract readonly levelId: LevelId;
   private level!: LevelDefinition;
   private player!: Player;
   private boss?: Boss;
@@ -67,6 +69,8 @@ export abstract class BaseLevelScene extends Phaser.Scene {
   private heartSeals: Phaser.GameObjects.Image[] = [];
   private heart?: Phaser.GameObjects.Image;
   private heartHits = 0;
+  private prisonSeals: Phaser.GameObjects.Image[] = [];
+  private swarmHazards: Phaser.Physics.Arcade.Image[] = [];
   private hostileProjectiles = new Set<HostileProjectile>();
   private trishula?: TrishulaRuntime;
   private readonly pauseHandler = () => this.pauseGame();
@@ -112,7 +116,17 @@ export abstract class BaseLevelScene extends Phaser.Scene {
     this.spawnCheckpoints();
     this.spawnHazards();
     this.spawnEnemies();
-    if (this.levelId === 3) this.spawnHeartSequence();
+    if (this.levelId === 7) this.spawnHeartSequence();
+    if (this.levelId === 6) this.spawnPrisonSealSequence();
+    if (import.meta.env.DEV && new URLSearchParams(window.location.search).get("boss") === "1") {
+      if (this.levelId === 7) {
+        this.heartSeals.forEach((seal) => seal.destroy());
+        this.heart?.destroy();
+        this.heartHits = 3;
+      } else if (this.levelId === 6) {
+        this.prisonSeals.forEach((seal) => seal.destroy());
+      }
+    }
     this.createExit();
     this.createHud();
     this.bindEvents();
@@ -135,7 +149,7 @@ export abstract class BaseLevelScene extends Phaser.Scene {
     this.boss?.update(time);
     this.updateHostileProjectiles(time);
     this.updateTrishulaUltimate(time);
-    if (!this.bossStarted && this.player.x > 3190 && (this.levelId < 3 || this.heartHits >= 3)) {
+    if (!this.bossStarted && this.player.x > 3190 && this.canStartBoss()) {
       this.startBoss();
     }
     if (this.player.y > 710) this.respawn();
@@ -191,14 +205,67 @@ export abstract class BaseLevelScene extends Phaser.Scene {
   }
 
   private spawnEnemies(): void {
-    const roster: Array<[number, EnemyKind]> = [
-      [760, "yak-guard"],
-      [1110, "yak-archer"],
-      [1570, "bat-spirit"],
-      [2040, "shadow-mage"],
-      [2390, "yak-guard"],
-      [2830, this.levelId === 1 ? "yak-archer" : "bat-spirit"],
-    ];
+    const kinds: Record<LevelId, EnemyKind[]> = {
+      1: [
+        "yak-guard",
+        "yak-archer",
+        "bat-spirit",
+        "shadow-mage",
+        "yak-guard",
+        "yak-archer",
+      ],
+      2: [
+        "yak-guard",
+        "yak-archer",
+        "yak-guard",
+        "shadow-mage",
+        "yak-archer",
+        "yak-guard",
+      ],
+      3: [
+        "shadow-mage",
+        "yak-guard",
+        "bat-spirit",
+        "shadow-mage",
+        "yak-guard",
+        "bat-spirit",
+      ],
+      4: [
+        "bat-spirit",
+        "shadow-mage",
+        "bat-spirit",
+        "yak-archer",
+        "shadow-mage",
+        "bat-spirit",
+      ],
+      5: [
+        "yak-guard",
+        "bat-spirit",
+        "shadow-mage",
+        "bat-spirit",
+        "yak-guard",
+        "bat-spirit",
+      ],
+      6: [
+        "yak-guard",
+        "yak-archer",
+        "shadow-mage",
+        "yak-guard",
+        "shadow-mage",
+        "yak-archer",
+      ],
+      7: [
+        "shadow-mage",
+        "yak-guard",
+        "bat-spirit",
+        "yak-archer",
+        "shadow-mage",
+        "bat-spirit",
+      ],
+    };
+    const roster = [760, 1110, 1570, 2040, 2390, 2830].map(
+      (x, index) => [x, kinds[this.levelId][index]] as [number, EnemyKind],
+    );
     roster.forEach(([x, kind]) => {
       const surface = getTerrainSurfaceAt(this.levelId, x);
       const enemy = new Enemy(
@@ -274,15 +341,20 @@ export abstract class BaseLevelScene extends Phaser.Scene {
   }
 
   private spawnHazards(): void {
-    const positions =
-      this.levelId === 1
-        ? [930, 2200]
-        : this.levelId === 2
-          ? [880, 2180]
-          : [980, 2220, 2860];
-    positions.forEach((x, index) => {
+    const positions: Record<LevelId, number[]> = {
+      1: [930, 2200],
+      2: [940, 2110, 2760],
+      3: [920, 2100, 2810],
+      4: [880, 2080, 2780],
+      5: [880, 2180],
+      6: [980, 2210, 2840],
+      7: [980, 2220, 2860],
+    };
+    positions[this.levelId].forEach((x, index) => {
       const texture: HazardTexture =
-        this.levelId === 1 && index === 0 ? "sleep-mist" : "blade-trap";
+        this.levelId === 4 || (this.levelId === 1 && index === 0)
+          ? "sleep-mist"
+          : "blade-trap";
       const presentation = getHazardPresentation(texture);
       const surfaceY = this.getSurfaceY(x);
       const hazard = this.physics.add.staticImage(
@@ -294,6 +366,7 @@ export abstract class BaseLevelScene extends Phaser.Scene {
         .setDisplaySize(presentation.displayWidth, presentation.displayHeight)
         .setDepth(16)
         .refreshBody();
+      if (this.levelId === 4) this.swarmHazards.push(hazard);
       (hazard.body as Phaser.Physics.Arcade.StaticBody).setSize(
         presentation.hitboxWidth,
         presentation.hitboxHeight,
@@ -306,6 +379,7 @@ export abstract class BaseLevelScene extends Phaser.Scene {
         this.tweens.add({ targets: hazard, alpha: 0.55, duration: 900, yoyo: true, repeat: -1 });
       }
       this.physics.add.overlap(this.player, hazard, () => {
+        if (!hazard.active) return;
         if (this.player.takeDamage(presentation.damage, hazard.x)) {
           this.hazardDamageVfx(presentation.damage, presentation.color);
         }
@@ -460,6 +534,79 @@ export abstract class BaseLevelScene extends Phaser.Scene {
       .setDepth(60);
   }
 
+  private spawnPrisonSealSequence(): void {
+    [2740, 2940, 3120].forEach((x) => {
+      const seal = this.add
+        .image(x, this.getSurfaceY(x) - 82, "heart-seal")
+        .setScale(0.21)
+        .setTint(0xff675f)
+        .setDepth(17);
+      this.prisonSeals.push(seal);
+      this.tweens.add({
+        targets: seal,
+        scale: seal.scale * 1.12,
+        alpha: 0.62,
+        duration: 620,
+        yoyo: true,
+        repeat: -1,
+        ease: "Sine.easeInOut",
+      });
+    });
+  }
+
+  private hitPrisonSeals(range: Phaser.Geom.Rectangle): void {
+    const seal = this.prisonSeals.find(
+      (candidate) =>
+        candidate.active &&
+        Phaser.Geom.Intersects.RectangleToRectangle(
+          range,
+          candidate.getBounds(),
+        ),
+    );
+    if (!seal) return;
+    const x = seal.x;
+    const y = seal.y;
+    seal.destroy();
+    audioDirector.play("hit");
+    this.impactVfx(x, y, 0xb7ff63);
+    const remaining = this.prisonSeals.filter((item) => item.active).length;
+    this.flashMessage(`ตราคุกถูกทำลาย ${3 - remaining}/3`, 0xb7ff63);
+    if (remaining === 0) {
+      this.instruction.setText(
+        "ตราผนึกสลายแล้ว • THE PRISON WARD IS BROKEN",
+      );
+      this.time.delayedCall(2000, () => this.instruction.setText(""));
+    }
+  }
+
+  private disperseSwarm(range: Phaser.Geom.Rectangle): void {
+    const hazard = this.swarmHazards.find(
+      (candidate) =>
+        candidate.active &&
+        Phaser.Geom.Intersects.RectangleToRectangle(
+          range,
+          candidate.getBounds(),
+        ),
+    );
+    if (!hazard) return;
+    const { x, y } = hazard;
+    hazard.disableBody(true, true);
+    this.windVfx(x, y, 0xff91ed);
+    this.flashMessage("วายุแหวกฝูงมศก", 0xff91ed, 900);
+    this.time.delayedCall(3400, () => {
+      if (!this.scene.isActive()) return;
+      hazard.enableBody(true, x, y, true, true).refreshBody();
+    });
+  }
+
+  private canStartBoss(): boolean {
+    if (this.levelId === 7) return this.heartHits >= 3;
+    if (this.levelId === 6) {
+      return !this.prisonSeals.some((seal) => seal.active);
+    }
+    return true;
+  }
+
   private createExit(): void {
     const exit = this.physics.add.staticImage(3720, this.getSurfaceY(3720) - 100, "exit-portal");
     exit.setScale(0.29).setDepth(15).setVisible(false);
@@ -567,7 +714,7 @@ export abstract class BaseLevelScene extends Phaser.Scene {
       .setDepth(52)
       .setVisible(false);
 
-    if (this.levelId !== 3) {
+    if (this.levelId !== 7) {
       this.instruction = this.add
         .text(640, 660, "", {
           fontFamily: FONT_FAMILY,
@@ -587,19 +734,35 @@ export abstract class BaseLevelScene extends Phaser.Scene {
       this.hpBar.width = 286 * (stats.health / 100);
       this.windBar.width = 286 * (stats.wind / 100);
     });
-    this.events.on("player-attack", (x: number, y: number, damage: number, skill: boolean) => {
-      const range = new Phaser.Geom.Rectangle(x - (skill ? 170 : 85), y - 100, skill ? 340 : 170, 200);
+    this.events.on("player-attack", (attack: NormalAttackPayload) => {
+      const range = new Phaser.Geom.Rectangle(
+        attack.left,
+        attack.top,
+        attack.width,
+        attack.height,
+      );
+      this.playerAttackVfx(attack);
+      let hitSomething = false;
       this.enemies.forEach((enemy) => {
         if (enemy.active && Phaser.Geom.Intersects.RectangleToRectangle(range, enemy.getBounds())) {
-          enemy.hit(damage, this.player.x);
+          enemy.hit(attack.damage, this.player.x);
+          this.playerAttackImpactVfx(enemy.x, enemy.y - 55, attack.damage);
           this.player.addWind(6);
+          hitSomething = true;
         }
       });
       if (this.boss?.active && Phaser.Geom.Intersects.RectangleToRectangle(range, this.boss.getBounds())) {
-        this.boss.hit(damage, this.player.x);
+        this.boss.hit(attack.damage, this.player.x);
+        this.playerAttackImpactVfx(this.boss.x, this.boss.y - 80, attack.damage);
         this.player.addWind(5);
+        hitSomething = true;
       }
-      if (this.levelId === 3) this.hitHeartSequence(range);
+      if (this.levelId === 7) this.hitHeartSequence(range);
+      if (this.levelId === 6) this.hitPrisonSeals(range);
+      if (this.levelId === 4 && attack.isSkill) this.disperseSwarm(range);
+      if (hitSomething && saveStore.get().settings.screenShake) {
+        this.cameras.main.shake(55, 0.0015);
+      }
     });
     this.events.on("wind-vfx", (x: number, y: number, color: number) => this.windVfx(x, y, color));
     this.events.on("trishula-ultimate", (cast: TrishulaCastOrigin) =>
@@ -625,16 +788,22 @@ export abstract class BaseLevelScene extends Phaser.Scene {
     );
     this.events.on(
       "boss-telegraph",
-      (x: number, y: number, direction: number, duration: number) =>
-        this.bossTelegraphVfx(x, y, direction, duration),
+      (
+        x: number,
+        y: number,
+        direction: number,
+        duration: number,
+        color: number,
+        attack: HostileProjectileKind | "charge",
+      ) => this.bossTelegraphVfx(x, y, direction, duration, color, attack),
     );
     this.events.on(
       "projectile-impact",
       (x: number, y: number, kind: HostileProjectileKind) =>
         this.projectileImpactVfx(x, y, kind),
     );
-    this.events.on("boss-slam", (x: number, y: number) => {
-      this.impactVfx(x, y, 0xffc44f);
+    this.events.on("boss-slam", (x: number, y: number, color: number) => {
+      this.impactVfx(x, y, color ?? 0xffc44f);
       if (saveStore.get().settings.screenShake) this.cameras.main.shake(100, 0.0035);
     });
     this.events.on("boss-health", (health: number, max: number) => {
@@ -678,10 +847,12 @@ export abstract class BaseLevelScene extends Phaser.Scene {
     this.enemies.forEach((enemy) => {
       if (enemy.active && enemy.x > 3000) enemy.disableBody(true, true);
     });
-    const bossX = this.levelId === 1 ? 3690 : this.levelId === 2 ? 3585 : 3530;
+    const profile = bossProfileFor(this.levelId);
+    const bossX = profile.spawnX;
     const bossSurface = getTerrainSurfaceAt(this.levelId, bossX);
-    const bossY =
-      this.levelId === 2 ? this.getSurfaceY(bossX) - 120 : this.getActorSpawnY(bossX);
+    const bossY = profile.floating
+      ? this.getSurfaceY(bossX) - 132
+      : this.getActorSpawnY(bossX);
     this.boss = new Boss(
       this,
       bossX,
@@ -689,11 +860,15 @@ export abstract class BaseLevelScene extends Phaser.Scene {
       this.level.bossTexture,
       this.player,
       this.levelId,
-      this.levelId === 2 || !bossSurface
+      profile.floating || !bossSurface
         ? undefined
         : { left: bossSurface.x, right: bossSurface.x + bossSurface.width },
     );
     this.physics.add.collider(this.boss, this.platforms);
+    this.physics.add.overlap(this.player, this.boss, () => {
+      if (!this.boss?.active) return;
+      this.player.takeDamage(16, this.boss.x);
+    });
     this.bossBarBg.setVisible(true);
     this.bossBar.setVisible(true);
     this.bossLabel.setVisible(true);
@@ -715,12 +890,8 @@ export abstract class BaseLevelScene extends Phaser.Scene {
     this.bossLabel.setVisible(false);
     this.cameras.main.setBounds(0, 0, WORLD_WIDTH, 720);
     audioDirector.play("victory");
-    const message =
-      this.levelId === 2
-        ? "มัจฉานุยุติการต่อสู้และเปิดทางลับ"
-        : this.levelId === 3
-          ? "ไมยราพสิ้นฤทธิ์ พระรามได้รับการช่วยเหลือ"
-          : "ประตูบาดาลเปิดออก";
+    const language = saveStore.get().settings.language;
+    const message = this.level.victory[language];
     this.flashMessage(message, 0xffe09a, 2800);
     this.events.emit("reveal-exit");
   }
@@ -773,12 +944,17 @@ export abstract class BaseLevelScene extends Phaser.Scene {
     const language = saveStore.get().settings.language;
     const shade = this.add.rectangle(640, 360, 1280, 720, 0x030510, 0.48).setScrollFactor(0).setDepth(80);
     const chapter = this.add
-      .text(640, 265, `ด่าน ${this.levelId} • CHAPTER 0${this.levelId}`, {
+      .text(
+        640,
+        265,
+        `ด่าน ${this.levelId} • CHAPTER ${String(this.levelId).padStart(2, "0")}`,
+        {
         fontFamily: FONT_FAMILY,
         fontSize: "18px",
         color: "#70def0",
         letterSpacing: 4,
-      })
+        },
+      )
       .setOrigin(0.5)
       .setScrollFactor(0)
       .setDepth(81);
@@ -860,6 +1036,122 @@ export abstract class BaseLevelScene extends Phaser.Scene {
         onComplete: () => particle.destroy(),
       });
     }
+  }
+
+  private playerAttackVfx(attack: NormalAttackPayload): void {
+    const color = 0xffb936;
+    const highlight = 0xffe58a;
+    const pulse = this.add
+      .ellipse(
+        attack.centerX,
+        attack.centerY,
+        attack.width,
+        attack.height * 0.56,
+        color,
+        0.13,
+      )
+      .setStrokeStyle(3, color, 0.7)
+      .setDepth(30)
+      .setScale(0.34, 0.58);
+    const slash = this.add
+      .arc(
+        attack.originX + attack.direction * 18,
+        attack.centerY,
+        112,
+        attack.direction > 0 ? -62 : 118,
+        attack.direction > 0 ? 62 : 242,
+        false,
+        color,
+        0.04,
+      )
+      .setStrokeStyle(9, highlight, 0.88)
+      .setDepth(31)
+      .setScale(0.72);
+    const core = this.add
+      .circle(
+        attack.originX + attack.direction * 44,
+        attack.centerY,
+        10,
+        highlight,
+        0.78,
+      )
+      .setDepth(32)
+      .setBlendMode(Phaser.BlendModes.ADD);
+
+    this.tweens.add({
+      targets: pulse,
+      scaleX: 1.06,
+      scaleY: 1.08,
+      alpha: 0,
+      duration: attack.durationMs,
+      ease: "Cubic.easeOut",
+      onComplete: () => pulse.destroy(),
+    });
+    this.tweens.add({
+      targets: slash,
+      scale: 1.16,
+      alpha: 0,
+      duration: attack.durationMs - 30,
+      ease: "Quad.easeOut",
+      onComplete: () => slash.destroy(),
+    });
+    this.tweens.add({
+      targets: core,
+      x: attack.centerX + attack.direction * 72,
+      scale: 0.25,
+      alpha: 0,
+      duration: attack.durationMs - 60,
+      ease: "Cubic.easeOut",
+      onComplete: () => core.destroy(),
+    });
+
+    for (let index = 0; index < 6; index += 1) {
+      const spark = this.add
+        .circle(
+          attack.originX + attack.direction * Phaser.Math.Between(36, 72),
+          attack.centerY + Phaser.Math.Between(-34, 34),
+          Phaser.Math.Between(2, 5),
+          highlight,
+          0.88,
+        )
+        .setDepth(32)
+        .setBlendMode(Phaser.BlendModes.ADD);
+      this.tweens.add({
+        targets: spark,
+        x: spark.x + attack.direction * Phaser.Math.Between(90, 170),
+        y: spark.y + Phaser.Math.Between(-28, 28),
+        alpha: 0,
+        scaleX: 2.6,
+        scaleY: 0.35,
+        duration: Phaser.Math.Between(150, 230),
+        ease: "Cubic.easeOut",
+        onComplete: () => spark.destroy(),
+      });
+    }
+  }
+
+  private playerAttackImpactVfx(x: number, y: number, damage: number): void {
+    this.impactVfx(x, y, 0xffdc72);
+    const damageText = this.add
+      .text(x, y - 18, `-${damage}`, {
+        fontFamily: FONT_FAMILY,
+        fontSize: "25px",
+        fontStyle: "bold",
+        color: "#fff4bb",
+        stroke: "#7d3d13",
+        strokeThickness: 5,
+      })
+      .setOrigin(0.5)
+      .setDepth(42);
+    this.tweens.add({
+      targets: damageText,
+      y: y - 70,
+      scale: 1.18,
+      alpha: 0,
+      duration: 520,
+      ease: "Cubic.easeOut",
+      onComplete: () => damageText.destroy(),
+    });
   }
 
   private impactVfx(x: number, y: number, color: number): void {
@@ -969,12 +1261,46 @@ export abstract class BaseLevelScene extends Phaser.Scene {
     y: number,
     direction: number,
     duration: number,
+    color: number,
+    attack: HostileProjectileKind | "charge",
   ): void {
+    if (attack === "shield-disc") {
+      this.shieldDiscTelegraph(x, y, direction, duration);
+      return;
+    }
+    if (attack === "tidal-trident") {
+      this.tidalTridentTelegraph(x, y, direction, duration);
+      return;
+    }
+    if (attack === "hypnosis-orb") {
+      this.hypnosisTelegraph(x, y, direction, duration);
+      return;
+    }
+    const isCharge = attack === "charge";
+    const isOrb = attack === "magma-boulder" || attack === "chain-sigil";
+    const isStinger = attack === "lotus-stinger";
     const warning = this.add
-      .ellipse(x + direction * 92, y - 18, 250, 86, 0xff5e52, 0.12)
-      .setStrokeStyle(4, 0xffcc65, 0.92)
+      .ellipse(
+        x + direction * (isCharge ? 120 : 88),
+        y - (isOrb || isStinger ? 105 : 18),
+        isCharge ? 310 : isStinger ? 270 : isOrb ? 150 : 250,
+        isCharge ? 96 : isStinger ? 64 : isOrb ? 150 : 86,
+        color,
+        0.13,
+      )
+      .setStrokeStyle(4, color, 0.98)
       .setDepth(30)
       .setScale(0.58);
+    const core = this.add
+      .circle(
+        warning.x,
+        warning.y,
+        isOrb ? 18 : 11,
+        0xffffff,
+        0.8,
+      )
+      .setDepth(31)
+      .setBlendMode(Phaser.BlendModes.ADD);
     this.tweens.add({
       targets: warning,
       scaleX: 1,
@@ -983,6 +1309,117 @@ export abstract class BaseLevelScene extends Phaser.Scene {
       duration,
       ease: "Cubic.easeIn",
       onComplete: () => warning.destroy(),
+    });
+    this.tweens.add({
+      targets: core,
+      scale: isOrb ? 3.4 : 2.2,
+      alpha: 0,
+      duration,
+      ease: "Cubic.easeIn",
+      onComplete: () => core.destroy(),
+    });
+  }
+
+  private shieldDiscTelegraph(
+    x: number,
+    y: number,
+    direction: number,
+    duration: number,
+  ): void {
+    const disc = this.add
+      .star(x + direction * 92, y - 108, 12, 24, 68, 0xff7b25, 0.12)
+      .setStrokeStyle(5, 0xffd06b, 0.95)
+      .setDepth(31)
+      .setScale(0.45);
+    const core = this.add
+      .circle(disc.x, disc.y, 16, 0xfff0a8, 0.88)
+      .setDepth(32)
+      .setBlendMode(Phaser.BlendModes.ADD);
+    this.tweens.add({
+      targets: disc,
+      scale: 1,
+      angle: direction * 220,
+      alpha: 0,
+      duration,
+      ease: "Cubic.easeIn",
+      onComplete: () => disc.destroy(),
+    });
+    this.tweens.add({
+      targets: core,
+      scale: 2.6,
+      alpha: 0,
+      duration,
+      onComplete: () => core.destroy(),
+    });
+  }
+
+  private tidalTridentTelegraph(
+    x: number,
+    y: number,
+    direction: number,
+    duration: number,
+  ): void {
+    [-28, 0, 28].forEach((offset, index) => {
+      const wave = this.add
+        .ellipse(
+          x + direction * (88 + index * 18),
+          y - 92 + offset,
+          70,
+          26,
+          0x5beaff,
+          0.08,
+        )
+        .setStrokeStyle(4, index === 1 ? 0xffffff : 0x72efff, 0.9)
+        .setDepth(31)
+        .setScale(0.45);
+      this.tweens.add({
+        targets: wave,
+        scaleX: 2.7,
+        scaleY: 1.2,
+        x: wave.x + direction * 95,
+        alpha: 0,
+        duration: duration + index * 45,
+        ease: "Quad.easeIn",
+        onComplete: () => wave.destroy(),
+      });
+    });
+  }
+
+  private hypnosisTelegraph(
+    x: number,
+    y: number,
+    direction: number,
+    duration: number,
+  ): void {
+    const centerX = x + direction * 86;
+    const centerY = y - 112;
+    [28, 48, 70].forEach((radius, index) => {
+      const ring = this.add
+        .circle(centerX, centerY, radius, 0x94ff58, 0.025)
+        .setStrokeStyle(index === 1 ? 5 : 3, index === 1 ? 0xd7ff75 : 0x8d62ff, 0.9)
+        .setDepth(31)
+        .setScale(0.4);
+      this.tweens.add({
+        targets: ring,
+        scale: 1,
+        angle: direction * (index % 2 === 0 ? 180 : -180),
+        alpha: 0,
+        duration: duration + index * 55,
+        ease: "Sine.easeIn",
+        onComplete: () => ring.destroy(),
+      });
+    });
+    const eye = this.add
+      .ellipse(centerX, centerY, 28, 12, 0xf2ffb5, 0.9)
+      .setDepth(32)
+      .setBlendMode(Phaser.BlendModes.ADD);
+    this.tweens.add({
+      targets: eye,
+      scaleX: 2.2,
+      scaleY: 0.25,
+      alpha: 0,
+      duration,
+      onComplete: () => eye.destroy(),
     });
   }
 
@@ -1014,8 +1451,66 @@ export abstract class BaseLevelScene extends Phaser.Scene {
           ? 0x6dff68
           : kind === "bat-bolt"
             ? 0x6ccfff
-            : 0xffd068;
+            : kind === "shield-disc"
+              ? 0xff9a36
+            : kind === "tusk-wave"
+              ? 0x72efff
+              : kind === "magma-boulder"
+                ? 0xff8b38
+                : kind === "lotus-stinger"
+                  ? 0xff83ee
+                  : kind === "chain-sigil"
+                    ? 0xb7ff63
+                    : kind === "tidal-trident"
+                      ? 0x5eefff
+                      : kind === "hypnosis-orb"
+                        ? 0xc7ff62
+                    : 0xffd068;
     this.impactVfx(x, y, color);
+    if (kind === "shield-disc") {
+      const sparks = this.add
+        .star(x, y, 10, 14, 52, 0xff9b38, 0.15)
+        .setStrokeStyle(5, 0xffe28a, 0.9)
+        .setDepth(32);
+      this.tweens.add({
+        targets: sparks,
+        scale: 2.2,
+        angle: 170,
+        alpha: 0,
+        duration: 340,
+        onComplete: () => sparks.destroy(),
+      });
+    } else if (kind === "tidal-trident") {
+      [-22, 0, 22].forEach((offset) => {
+        const splash = this.add
+          .ellipse(x, y + offset, 46, 18, 0x61efff, 0)
+          .setStrokeStyle(4, 0xbfffff, 0.9)
+          .setDepth(32);
+        this.tweens.add({
+          targets: splash,
+          scaleX: 3.1,
+          scaleY: 1.7,
+          alpha: 0,
+          duration: 310,
+          onComplete: () => splash.destroy(),
+        });
+      });
+    } else if (kind === "hypnosis-orb") {
+      [1, 1.45, 1.9].forEach((targetScale, index) => {
+        const ring = this.add
+          .circle(x, y, 26 + index * 10, 0x91ff5d, 0.03)
+          .setStrokeStyle(4, index === 1 ? 0xd8ff71 : 0x8e62ff, 0.88)
+          .setDepth(32);
+        this.tweens.add({
+          targets: ring,
+          scale: targetScale,
+          angle: index % 2 === 0 ? 140 : -140,
+          alpha: 0,
+          duration: 360 + index * 60,
+          onComplete: () => ring.destroy(),
+        });
+      });
+    }
   }
 
   private startTrishulaUltimate(cast: TrishulaCastOrigin): void {
@@ -1116,7 +1611,7 @@ export abstract class BaseLevelScene extends Phaser.Scene {
       this.boss.hit(48, this.player.x);
       this.impactVfx(this.boss.x, this.boss.y - 80, 0x7cecff);
     }
-    if (this.levelId === 3 && time - runtime.lastRelicHitAt > 150) {
+    if (this.levelId === 7 && time - runtime.lastRelicHitAt > 150) {
       runtime.lastRelicHitAt = time;
       this.hitHeartSequence(hitbox);
     }

@@ -1,7 +1,10 @@
+import type { LevelId } from "../data/types";
+
 export const unlockedAfterCompletion = (
-  currentUnlocked: 1 | 2 | 3,
+  currentUnlocked: LevelId,
   completedLevel: number,
-): 1 | 2 | 3 => Math.max(currentUnlocked, Math.min(3, completedLevel + 1)) as 1 | 2 | 3;
+): LevelId =>
+  Math.max(currentUnlocked, Math.min(7, completedLevel + 1)) as LevelId;
 
 export const ratingFor = (timeMs: number, damage: number, collectibles: number): 0 | 1 | 2 => {
   const score = (timeMs < 240_000 ? 1 : 0) + (damage <= 30 ? 1 : 0) + (collectibles === 3 ? 1 : 0);

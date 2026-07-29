@@ -34,17 +34,17 @@ npm run preview
 - หยุดเกม: `Escape`
 - มือถือแนวนอน: ปุ่มซ้าย/ขวาและ Jump / Attack / Dash / Skill รองรับ multi-touch
 
-ผู้เล่นต้องผ่าน 3 ด่านตามลำดับ ต่อสู้กับนายทวารรัตติกาล มัจฉานุ และไมยราพ ด่านสุดท้ายต้องทำลายผนึก 3 จุดและโจมตีดวงใจ 3 ครั้งก่อนเข้าศึกสุดท้าย
+ผู้เล่นต้องผ่าน 7 ด่านตามลำดับ ต่อสู้กับนายทวารรัตติกาล พญาคชสารเมฆา ทวารศิลาอัคนี นางพญามศกทมิฬ มัจฉานุ ขุนทัณฑ์เหล็ก และไมยราพ ด่าน 6 ต้องทำลายตราผนึกกรงเหล็ก 3 จุด ส่วนด่านสุดท้ายต้องทำลายผนึก 3 จุดและโจมตีดวงใจ 3 ครั้งก่อนเข้าศึกสุดท้าย
 
 ## ระบบบันทึก
 
-บันทึกด้วย `localStorage` key `hanuman_maiyarap_save_v1`, schema version `1` เมื่อเปิด checkpoint เก็บตราพระราม จบด่าน เปลี่ยนการตั้งค่า หรือกลับเมนู หากข้อมูลเสียหาย ระบบเริ่มข้อมูลใหม่และสำรอง raw value ไว้ที่ `hanuman_maiyarap_save_v1_corrupt`
+บันทึกด้วย `localStorage` key `hanuman_maiyarap_save_v1`, schema version `1` และ content revision `2` เมื่อเปิด checkpoint เก็บตราพระราม จบด่าน เปลี่ยนการตั้งค่า หรือกลับเมนู ระบบจะย้ายความคืบหน้าจากโครงสร้าง 3 ด่านเดิมไปยังลำดับ 7 ด่านให้อัตโนมัติ หากข้อมูลเสียหาย ระบบเริ่มข้อมูลใหม่และสำรอง raw value ไว้ที่ `hanuman_maiyarap_save_v1_corrupt`
 
 ไม่มีบัญชีผู้ใช้ analytics cookies หรือข้อมูลส่วนบุคคล
 
 ## โครงสร้าง
 
-- `src/scenes/` — boot, preload, menu, 3 ด่าน, pause, result และ ending
+- `src/scenes/` — boot, preload, menu, 7 ด่าน, pause, result และ ending
 - `src/entities/` — player, enemy และ boss
 - `src/systems/` — touch input, combat timing และ progression
 - `src/storage/` — save validation และ persistence
@@ -54,7 +54,7 @@ npm run preview
 
 ## ภาพและเสียง
 
-Core visual assets ทั้งหมดเป็นงานสร้างใหม่ด้วย OpenAI Image Generation และผ่าน chroma-key cleanup/crop/optimization ด้วย `scripts/process_assets.py` ไม่มี third-party visual asset หรือ SFX
+Core visual assets ทั้งหมดเป็นงานสร้างใหม่ด้วย OpenAI Image Generation และผ่าน chroma-key cleanup/crop/optimization ด้วย `scripts/process_assets.py` และ `scripts/process_expansion_assets.py` ไม่มี third-party visual asset หรือ SFX
 
 ดนตรีบรรยากาศและ SFX เป็น procedural Web Audio ที่เขียนขึ้นสำหรับเกมนี้ จึงไม่มีไฟล์เสียงภายนอกหรือ attribution เพิ่มเติม รายละเอียดอยู่ใน [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md)
 

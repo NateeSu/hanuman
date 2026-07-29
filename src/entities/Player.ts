@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import { audioDirector } from "../audio/AudioDirector";
+import { createNormalAttack } from "../systems/playerAttack";
 import { touchInput } from "../systems/touchInput";
 import {
   TRISHULA_TOTAL_MS,
@@ -149,10 +150,11 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   }
 
   private attack(time: number): void {
-    this.attackingUntil = time + 260;
+    const attack = createNormalAttack(this.x, this.y, this.flipX ? -1 : 1);
+    this.attackingUntil = time + attack.durationMs;
     this.setTexture("hanuman-attack-1");
     audioDirector.play("attack");
-    this.scene.events.emit("player-attack", this.x + (this.flipX ? -105 : 105), this.y - 45, 26, false);
+    this.scene.events.emit("player-attack", attack);
   }
 
   private skill(time: number): void {

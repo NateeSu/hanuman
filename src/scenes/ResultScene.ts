@@ -1,12 +1,13 @@
 import Phaser from "phaser";
-import { levelById } from "../data/levels";
+import { LEVEL_COUNT, levelById } from "../data/levels";
 import { t } from "../data/i18n";
+import type { LevelId } from "../data/types";
 import { saveStore } from "../storage/saveStore";
 import { ratingFor } from "../systems/progression";
 import { FONT_FAMILY, formatTime, makeButton, makeTitle } from "../ui/components";
 
 interface ResultData {
-  levelId: 1 | 2 | 3;
+  levelId: LevelId;
   timeMs: number;
   damageTaken: number;
   collectibles: number;
@@ -72,10 +73,16 @@ export class ResultScene extends Phaser.Scene {
       this,
       800,
       535,
-      this.dataValue.levelId === 3 ? (lang === "th" ? "ชมบทส่งท้าย" : "View Ending") : t(lang, "next"),
+      this.dataValue.levelId === LEVEL_COUNT
+        ? lang === "th"
+          ? "ชมบทส่งท้าย"
+          : "View Ending"
+        : t(lang, "next"),
       () =>
         this.scene.start(
-          this.dataValue.levelId === 3 ? "EndingScene" : `Level0${this.dataValue.levelId + 1}Scene`,
+          this.dataValue.levelId === LEVEL_COUNT
+            ? "EndingScene"
+            : levelById(this.dataValue.levelId + 1).sceneKey,
         ),
       { width: 300, accent: level.accent },
     );

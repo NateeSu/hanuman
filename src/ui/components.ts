@@ -27,32 +27,45 @@ export const makeButton = (
   y: number,
   label: string,
   onClick: () => void,
-  options: { width?: number; disabled?: boolean; accent?: number } = {},
+  options: {
+    width?: number;
+    height?: number;
+    fontSize?: number;
+    disabled?: boolean;
+    accent?: number;
+  } = {},
 ): Phaser.GameObjects.Container => {
   const width = options.width ?? 350;
+  const height = options.height ?? 62;
   const accent = options.accent ?? 0xd9ae5a;
   const background = scene.add.graphics();
   const draw = (hovered: boolean) => {
     background.clear();
     background.fillStyle(options.disabled ? 0x161826 : hovered ? 0x1d4662 : 0x11162a, 0.94);
-    background.fillRoundedRect(-width / 2, -31, width, 62, 12);
+    background.fillRoundedRect(-width / 2, -height / 2, width, height, 12);
     background.lineStyle(2, options.disabled ? 0x50566c : accent, hovered ? 1 : 0.72);
-    background.strokeRoundedRect(-width / 2, -31, width, 62, 12);
+    background.strokeRoundedRect(-width / 2, -height / 2, width, height, 12);
     if (hovered && !options.disabled) {
       background.lineStyle(1, 0x7aeaff, 0.45);
-      background.strokeRoundedRect(-width / 2 + 5, -26, width - 10, 52, 9);
+      background.strokeRoundedRect(
+        -width / 2 + 5,
+        -height / 2 + 5,
+        width - 10,
+        height - 10,
+        9,
+      );
     }
   };
   draw(false);
   const text = scene.add
     .text(0, 1, label, {
       fontFamily: FONT_FAMILY,
-      fontSize: "24px",
+      fontSize: `${options.fontSize ?? (height < 50 ? 18 : 24)}px`,
       fontStyle: "bold",
       color: options.disabled ? "#6f768d" : "#fff7dd",
     })
     .setOrigin(0.5);
-  const hit = scene.add.rectangle(0, 0, width, 64, 0x000000, 0.001);
+  const hit = scene.add.rectangle(0, 0, width, height + 2, 0x000000, 0.001);
   const container = scene.add.container(x, y, [background, text, hit]);
   if (!options.disabled) {
     hit

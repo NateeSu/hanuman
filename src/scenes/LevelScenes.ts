@@ -20,3 +20,31 @@ export class Level03Scene extends BaseLevelScene {
     super("Level03Scene");
   }
 }
+
+export class Level04Scene extends BaseLevelScene {
+  protected readonly levelId = 4 as const;
+  constructor() {
+    super("Level04Scene");
+  }
+}
+
+export class Level05Scene extends BaseLevelScene {
+  protected readonly levelId = 5 as const;
+  constructor() {
+    super("Level05Scene");
+  }
+}
+
+export class Level06Scene extends BaseLevelScene {
+  protected readonly levelId = 6 as const;
+  constructor() {
+    super("Level06Scene");
+  }
+}
+
+export class Level07Scene extends BaseLevelScene {
+  protected readonly levelId = 7 as const;
+  constructor() {
+    super("Level07Scene");
+  }
+}

@@ -1,6 +1,6 @@
 # Generated Asset Manifest
 
-Generated date: 2026-07-26  
+Generated date: 2026-07-28
 Tool: OpenAI built-in Image Generation  
 Art direction: `prompts/art-direction.md`
 
@@ -27,8 +27,12 @@ Runtime directory: `public/assets/characters/roster/poses/`
 | File | Category | Purpose |
 |---|---|---|
 | `gatekeeper.png` | boss | Level 1 boss |
-| `matchanu.png` | boss/character | Level 2 non-lethal boss |
-| `maiyarap.png` | final boss | Level 3 boss |
+| `khotchasan.png` | boss | Level 2 boss, bright cyan-blue elephant armor |
+| `akkhani.png` | boss | Level 3 boss, emissive orange magma stone |
+| `masaka.png` | boss | Level 4 boss, luminous pink-violet wings |
+| `matchanu.png` | boss/character | Level 5 non-lethal boss |
+| `than-lek.png` | boss | Level 6 boss, gold-green ritual chains |
+| `maiyarap.png` | final boss | Level 7 boss |
 | `rama.png` | story character | rescue/ending art |
 | `yak-guard.png` | enemy | melee enemy |
 | `yak-archer.png` | enemy | ranged enemy |
@@ -37,13 +41,23 @@ Runtime directory: `public/assets/characters/roster/poses/`
 
 Source 4×2 atlas 1774×887, transparent cleanup and cell trimming. Prompt: `prompts/characters.md`
 
+### Boss combat pose sets
+
+Every boss has a normalized three-pose WebP set named `{boss}-idle.webp`, `{boss}-cast.webp`, and `{boss}-strike.webp`. The seven sets cover Gatekeeper, Khotchasan, Akkhani, Masaka, Matchanu, Than Lek, and Maiyarap (21 runtime images total). Each set keeps a stable bottom-aligned pivot while changing the silhouette for telegraph, release, charge, and slam attacks.
+
+The source sheets were generated as identity-preserving two-pose sprite edits with the built-in Image Generation tool: a cast/windup pose on the left and a strike/release pose on the right, on a flat chroma background with no text or watermark. `scripts/process_boss_poses.py` removes the keyed background, splits the sheets, trims alpha, and normalizes idle/cast/strike frames onto one canvas per boss.
+
 ## Environments
 
 | Runtime path | Level | Source/final | Transparency | Prompt |
 |---|---|---|---|---|
 | `public/assets/levels/level-01/background.webp` | รัตติกาลเหนือค่ายพระราม | 1536×1024 WebP | no | `prompts/environments.md` |
-| `public/assets/levels/level-02/background.webp` | สระบัวแห่งมัจฉานุ | 1536×1024 WebP | no | `prompts/environments.md` |
-| `public/assets/levels/level-03/background.webp` | พระนครบาดาล | 1536×1024 WebP | no | `prompts/environments.md` |
+| `public/assets/levels/level-02/background.webp` | ช่องผาคชสารคลั่ง | 1536×1024 WebP | no | `docs/level-expansion-concept.md` |
+| `public/assets/levels/level-03/background.webp` | ภูผากระทบอัคนี | 1536×1024 WebP | no | `docs/level-expansion-concept.md` |
+| `public/assets/levels/level-04/background.webp` | พงไพรมศกอสูร | 1536×1024 WebP | no | `docs/level-expansion-concept.md` |
+| `public/assets/levels/level-05/background.webp` | สระบัวแห่งมัจฉานุ | 1536×1024 WebP | no | `prompts/environments.md` |
+| `public/assets/levels/level-06/background.webp` | ดงตาลกรงเหล็ก | 1536×1024 WebP | no | `docs/level-expansion-concept.md` |
+| `public/assets/levels/level-07/background.webp` | พระนครบาดาล | 1536×1024 WebP | no | `prompts/environments.md` |
 
 Gameplay uses invisible collision geometry aligned to the visible ground silhouettes. Backgrounds are repeated as long horizontal rooms; all core scene imagery is generated, not stock.
 
@@ -62,6 +76,10 @@ Objects: Rama seal, checkpoint, dash wall, sleep mist urn, heart reliquary, hear
 3. fixed-canvas alignment for Hanuman poses;
 4. optimized PNG output;
 5. WebP background compression.
+
+`scripts/process_expansion_assets.py` processes the four expansion backgrounds, removes boss/projectile chroma keys, preserves emissive edge color, and fits every transparent asset to a stable runtime canvas.
+
+`scripts/process_boss_poses.py` produces the 21 bottom-aligned boss pose WebPs used for runtime attack animation.
 
 Raw generated/chroma files are intentionally excluded from version control.
 
@@ -83,5 +101,12 @@ Runtime directory: `public/assets/projectiles/`
 | `mage-orb.png` | Shadow Mage | Slower green cursed orb | yes |
 | `bat-bolt.png` | Bat Spirit | Mid-speed blue-violet crescent bolt | yes |
 | `boss-wave.png` | Bosses / Maiyarap palette | Ground-hugging jumpable shockwave | yes |
+| `shield-disc.png` | Gatekeeper | Rotating fiery bronze shield disc | yes |
+| `tusk-wave.png` | พญาคชสารเมฆา | Cyan crescent tusk pressure wave | yes |
+| `magma-boulder.png` | ทวารศิลาอัคนี | Orange molten boulder with sparks | yes |
+| `lotus-stinger.png` | นางพญามศกทมิฬ | Pink-violet lotus stinger lance | yes |
+| `tidal-trident.png` | Matchanu | Fast cyan triple-crested tidal trident | yes |
+| `chain-sigil.png` | ขุนทัณฑ์เหล็ก | Green-gold binding chain seal | yes |
+| `hypnosis-orb.png` | Maiyarap | Homing lime-violet occult eye orb | yes |
 
-Prompt: `prompts/hostile-projectiles.md`. All four assets were generated separately with the built-in Image Generation tool, converted from a flat magenta chroma key to alpha, trimmed, resized for runtime use, and padded by 16 pixels.
+Prompt: `prompts/hostile-projectiles.md`, the approved expansion concept, and identity-specific old-boss projectile prompts. All eleven assets were generated separately with the built-in Image Generation tool, converted from a flat chroma key to alpha, trimmed, resized for runtime use, and padded for clean emissive edges.

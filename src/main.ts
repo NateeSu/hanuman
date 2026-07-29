@@ -5,7 +5,15 @@ import { PreloadScene } from "./scenes/PreloadScene";
 import { MainMenuScene } from "./scenes/MainMenuScene";
 import { LevelSelectScene } from "./scenes/LevelSelectScene";
 import { SettingsScene } from "./scenes/SettingsScene";
-import { Level01Scene, Level02Scene, Level03Scene } from "./scenes/LevelScenes";
+import {
+  Level01Scene,
+  Level02Scene,
+  Level03Scene,
+  Level04Scene,
+  Level05Scene,
+  Level06Scene,
+  Level07Scene,
+} from "./scenes/LevelScenes";
 import { PauseScene } from "./scenes/PauseScene";
 import { ResultScene } from "./scenes/ResultScene";
 import { EndingScene } from "./scenes/EndingScene";
@@ -46,6 +54,10 @@ const config: Phaser.Types.Core.GameConfig = {
     Level01Scene,
     Level02Scene,
     Level03Scene,
+    Level04Scene,
+    Level05Scene,
+    Level06Scene,
+    Level07Scene,
     PauseScene,
     ResultScene,
     EndingScene,
@@ -55,7 +67,9 @@ const config: Phaser.Types.Core.GameConfig = {
 try {
   const game = new Phaser.Game(config);
   const pauseActiveGameplay = () => {
-    const active = game.scene.getScenes(true).find((scene) => /^Level0[1-3]Scene$/.test(scene.scene.key));
+    const active = game.scene
+      .getScenes(true)
+      .find((scene) => /^Level0[1-7]Scene$/.test(scene.scene.key));
     if (active && !active.scene.isPaused()) {
       active.scene.pause();
       game.scene.start("PauseScene", { owner: active.scene.key });

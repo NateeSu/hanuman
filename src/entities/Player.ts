@@ -56,10 +56,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     }) as typeof this.keys;
   }
 
-  update(time: number, terrainGrounded = false): void {
+  update(time: number): void {
     const body = this.body as Phaser.Physics.Arcade.Body;
-    const grounded =
-      terrainGrounded || body.blocked.down || body.touching.down;
+    const grounded = body.blocked.down || body.touching.down;
     if (grounded) {
       this.lastGroundedAt = time;
       this.jumpsUsed = 0;
@@ -190,18 +189,6 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.emitStats();
     if (this.stats.health <= 0) this.scene.events.emit("player-defeated");
     return true;
-  }
-
-  defeatInstantly(): void {
-    if (!this.active || this.stats.health <= 0) return;
-    this.stats.damageTaken += this.stats.health;
-    this.stats.health = 0;
-    this.setTexture("hanuman-hurt");
-    this.setTint(0xff8b8b);
-    this.setVelocity(0, 0);
-    audioDirector.play("hit");
-    this.emitStats();
-    this.scene.events.emit("player-defeated");
   }
 
   healAndRestore(): void {

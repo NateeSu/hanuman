@@ -18,6 +18,7 @@ import {
 import { PauseScene } from "./scenes/PauseScene";
 import { ResultScene } from "./scenes/ResultScene";
 import { EndingScene } from "./scenes/EndingScene";
+import { StoryScene } from "./scenes/StoryScene";
 
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
@@ -53,6 +54,7 @@ const config: Phaser.Types.Core.GameConfig = {
     DeveloperScene,
     LevelSelectScene,
     SettingsScene,
+    StoryScene,
     Level01Scene,
     Level02Scene,
     Level03Scene,

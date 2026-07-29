@@ -78,7 +78,7 @@ export abstract class BaseLevelScene extends Phaser.Scene {
   create(): void {
     this.level = levelById(this.levelId);
     this.startTime = this.time.now;
-    this.gameplayStartsAt = this.time.now + 3300;
+    this.gameplayStartsAt = this.time.now + 180;
     const save = saveStore.get();
     const savedCollectibles = save.levelStats[String(this.levelId)]?.collectibles ?? [];
     this.collected = new Set(savedCollectibles);
@@ -130,8 +130,12 @@ export abstract class BaseLevelScene extends Phaser.Scene {
     this.createExit();
     this.createHud();
     this.bindEvents();
-    this.showStory();
-
+    if (this.levelId === 1) {
+      this.instruction.setText(
+        "A/D หรือ ◀ ▶ เคลื่อนที่ · SPACE/กระโดด · J/โจมตี · K/ตรีศูลวายุ",
+      );
+      this.time.delayedCall(5000, () => this.instruction.setText(""));
+    }
     const keyboard = this.input.keyboard;
     keyboard?.on("keydown-ESC", this.pauseHandler);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
@@ -938,63 +942,6 @@ export abstract class BaseLevelScene extends Phaser.Scene {
     touchInput.reset();
     this.scene.pause();
     this.scene.launch("PauseScene", { owner: this.scene.key });
-  }
-
-  private showStory(): void {
-    const language = saveStore.get().settings.language;
-    const shade = this.add.rectangle(640, 360, 1280, 720, 0x030510, 0.48).setScrollFactor(0).setDepth(80);
-    const chapter = this.add
-      .text(
-        640,
-        265,
-        `ด่าน ${this.levelId} • CHAPTER ${String(this.levelId).padStart(2, "0")}`,
-        {
-        fontFamily: FONT_FAMILY,
-        fontSize: "18px",
-        color: "#70def0",
-        letterSpacing: 4,
-        },
-      )
-      .setOrigin(0.5)
-      .setScrollFactor(0)
-      .setDepth(81);
-    const title = this.add
-      .text(640, 320, this.level.title[language], {
-        fontFamily: FONT_FAMILY,
-        fontSize: "44px",
-        fontStyle: "bold",
-        color: "#fff1c6",
-        stroke: "#080812",
-        strokeThickness: 7,
-      })
-      .setOrigin(0.5)
-      .setScrollFactor(0)
-      .setDepth(81);
-    const story = this.add
-      .text(640, 390, this.level.story[language], {
-        fontFamily: FONT_FAMILY,
-        fontSize: "20px",
-        color: "#d5deef",
-        align: "center",
-        wordWrap: { width: 790 },
-      })
-      .setOrigin(0.5)
-      .setScrollFactor(0)
-      .setDepth(81);
-    this.time.delayedCall(2600, () => {
-      this.tweens.add({
-        targets: [shade, chapter, title, story],
-        alpha: 0,
-        duration: 650,
-        onComplete: () => [shade, chapter, title, story].forEach((item) => item.destroy()),
-      });
-      if (this.levelId === 1) {
-        this.instruction.setText(
-          "A/D หรือ ◀ ▶ เคลื่อนที่ · SPACE/กระโดด · J/โจมตี · K/ตรีศูลวายุ",
-        );
-        this.time.delayedCall(5000, () => this.instruction.setText(""));
-      }
-    });
   }
 
   private flashMessage(text: string, color: number, duration = 1500): void {

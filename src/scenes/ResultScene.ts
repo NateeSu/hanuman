@@ -82,7 +82,10 @@ export class ResultScene extends Phaser.Scene {
         this.scene.start(
           this.dataValue.levelId === LEVEL_COUNT
             ? "EndingScene"
-            : levelById(this.dataValue.levelId + 1).sceneKey,
+            : "StoryScene",
+          this.dataValue.levelId === LEVEL_COUNT
+            ? undefined
+            : { levelId: this.dataValue.levelId + 1 },
         ),
       { width: 300, accent: level.accent },
     );

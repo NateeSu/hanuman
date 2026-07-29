@@ -70,6 +70,10 @@ export class PreloadScene extends Phaser.Scene {
           `level-${paddedId}`,
           `/assets/levels/level-${paddedId}/background.webp`,
         );
+        this.load.image(
+          `story-level-${paddedId}`,
+          `/assets/story/level-${paddedId}.webp`,
+        );
       },
     );
     hanumanPoses.forEach((pose) =>
@@ -142,14 +146,21 @@ export class PreloadScene extends Phaser.Scene {
         const requestedLevel = import.meta.env.DEV
           ? new URLSearchParams(window.location.search).get("level")
           : null;
-        const target =
-          requestedLevel &&
+        const requestedEnding =
+          import.meta.env.DEV &&
+          new URLSearchParams(window.location.search).get("ending") === "1";
+        const target = requestedEnding
+          ? "EndingScene"
+          : requestedLevel &&
           Array.from({ length: LEVEL_COUNT }, (_, index) =>
             String(index + 1),
           ).includes(requestedLevel)
-            ? `Level0${requestedLevel}Scene`
+            ? "StoryScene"
             : "MainMenuScene";
-        this.scene.start(target);
+        this.scene.start(
+          target,
+          target === "StoryScene" ? { levelId: Number(requestedLevel) } : undefined,
+        );
       });
     });
     this.load.on("loaderror", (file: Phaser.Loader.File) => {

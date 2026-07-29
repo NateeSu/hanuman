@@ -52,7 +52,7 @@ export class MainMenuScene extends Phaser.Scene {
 
     makeButton(this, 805, 286, t(lang, "newGame"), () => {
       audioDirector.unlock();
-      this.scene.start("Level01Scene");
+      this.scene.start("StoryScene", { levelId: 1 });
     });
     const hasProgress = save.completedLevels.length > 0 || !!save.latestCheckpoint;
     makeButton(

@@ -107,7 +107,7 @@ export class LevelSelectScene extends Phaser.Scene {
         x,
         y + 82,
         unlocked ? (lang === "th" ? "เริ่มด่าน" : "Begin") : "—",
-        () => this.scene.start(level.sceneKey),
+        () => this.scene.start("StoryScene", { levelId: level.id }),
         {
           width: 198,
           height: 42,

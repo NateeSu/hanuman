@@ -11,9 +11,12 @@ import { Player } from "../entities/Player";
 import { bossProfileFor } from "../data/bosses";
 import { levelById } from "../data/levels";
 import {
-  getTerrainPlatforms,
+  getTerrainCollisionSegments,
+  getTerrainDeathZoneAt,
+  getTerrainDeathZones,
   getTerrainSurfaceAt,
   getTerrainSurfaceY,
+  getTerrainSurfaceYs,
 } from "../data/terrain";
 import type { LevelDefinition, LevelId } from "../data/types";
 import { saveStore } from "../storage/saveStore";
@@ -24,6 +27,7 @@ import {
   type HazardTexture,
 } from "../systems/hazardPresentation";
 import type { NormalAttackPayload } from "../systems/playerAttack";
+import { resolveTerrainLanding } from "../systems/terrainPhysics";
 import { touchInput } from "../systems/touchInput";
 import {
   TRISHULA_RADIUS_X,
@@ -56,6 +60,7 @@ export abstract class BaseLevelScene extends Phaser.Scene {
   private gameplayStartsAt = 0;
   private collected = new Set<string>();
   private checkpointX = 140;
+  private initialSpawnX = 140;
   private bossStarted = false;
   private bossDefeated = false;
   private completing = false;
@@ -73,6 +78,7 @@ export abstract class BaseLevelScene extends Phaser.Scene {
   private swarmHazards: Phaser.Physics.Arcade.Image[] = [];
   private hostileProjectiles = new Set<HostileProjectile>();
   private trishula?: TrishulaRuntime;
+  private previousPlayerBottom = 0;
   private readonly pauseHandler = () => this.pauseGame();
 
   create(): void {
@@ -89,12 +95,13 @@ export abstract class BaseLevelScene extends Phaser.Scene {
           ? 2470
           : 1330
         : 140;
+    this.initialSpawnX = this.checkpointX;
     if (import.meta.env.DEV) {
       const debugSpawnX = Number(
         new URLSearchParams(window.location.search).get("spawnX"),
       );
       if (Number.isFinite(debugSpawnX) && debugSpawnX >= 40 && debugSpawnX <= WORLD_WIDTH - 40) {
-        this.checkpointX = debugSpawnX;
+        this.initialSpawnX = debugSpawnX;
       }
     }
 
@@ -107,8 +114,14 @@ export abstract class BaseLevelScene extends Phaser.Scene {
     this.cameras.main.setBounds(0, 0, WORLD_WIDTH, 720);
     this.createWorldArt();
     this.createTerrain();
-    this.player = new Player(this, this.checkpointX, this.getActorSpawnY(this.checkpointX));
-    this.physics.add.collider(this.player, this.platforms);
+    this.player = new Player(
+      this,
+      this.initialSpawnX,
+      this.getActorSpawnY(this.initialSpawnX),
+    );
+    this.previousPlayerBottom = (
+      this.player.body as Phaser.Physics.Arcade.Body
+    ).bottom;
     this.cameras.main.startFollow(this.player, true, 0.08, 0.1);
     this.cameras.main.setDeadzone(240, 120);
     this.cameras.main.setFollowOffset(-80, 20);
@@ -148,7 +161,9 @@ export abstract class BaseLevelScene extends Phaser.Scene {
   update(time: number): void {
     if (!this.player?.active || this.completing) return;
     if (time < this.gameplayStartsAt) return;
-    this.player.update(time);
+    const terrainGrounded = this.alignPlayerToTerrain();
+    if (this.checkForFatalFall()) return;
+    this.player.update(time, terrainGrounded);
     this.enemies.forEach((enemy) => enemy.update(time));
     this.boss?.update(time);
     this.updateHostileProjectiles(time);
@@ -156,7 +171,7 @@ export abstract class BaseLevelScene extends Phaser.Scene {
     if (!this.bossStarted && this.player.x > 3190 && this.canStartBoss()) {
       this.startBoss();
     }
-    if (this.player.y > 710) this.respawn();
+    if (this.player.y > 710) this.player.defeatInstantly();
   }
 
   private createWorldArt(): void {
@@ -193,7 +208,8 @@ export abstract class BaseLevelScene extends Phaser.Scene {
     const showDebugCollision =
       import.meta.env.DEV &&
       new URLSearchParams(window.location.search).get("debugCollision") === "1";
-    getTerrainPlatforms(this.levelId).forEach(({ x, y, width, height }) => {
+    getTerrainCollisionSegments(this.levelId).forEach(
+      ({ x, y, width, height }) => {
       const platform = this.add.rectangle(
         x + width / 2,
         y + height / 2,
@@ -205,7 +221,23 @@ export abstract class BaseLevelScene extends Phaser.Scene {
       if (showDebugCollision) platform.setStrokeStyle(2, 0x8dffb5, 0.95).setDepth(45);
       this.platforms.add(platform);
       (platform.body as Phaser.Physics.Arcade.StaticBody).updateFromGameObject();
-    });
+      },
+    );
+    if (showDebugCollision) {
+      getTerrainDeathZones(this.levelId).forEach(({ x, y, width }) => {
+        this.add
+          .rectangle(
+            x + width / 2,
+            y + (720 - y) / 2,
+            width,
+            720 - y,
+            0xff315f,
+            0.28,
+          )
+          .setStrokeStyle(3, 0xff8aa6, 0.95)
+          .setDepth(46);
+      });
+    }
   }
 
   private spawnEnemies(): void {
@@ -929,7 +961,10 @@ export abstract class BaseLevelScene extends Phaser.Scene {
         this.bossDefeated,
       );
       this.player.setPosition(respawnX, this.getActorSpawnY(respawnX));
+      const body = this.player.body as Phaser.Physics.Arcade.Body;
+      body.updateFromGameObject();
       this.player.setVelocity(0, 0);
+      this.previousPlayerBottom = body.bottom;
       this.player.healAndRestore();
       this.player.setActive(true);
       this.physics.resume();
@@ -1114,6 +1149,40 @@ export abstract class BaseLevelScene extends Phaser.Scene {
 
   private getSurfaceY(x: number): number {
     return getTerrainSurfaceY(this.levelId, x) ?? 548;
+  }
+
+  private alignPlayerToTerrain(): boolean {
+    const body = this.player.body as Phaser.Physics.Arcade.Body;
+    const landingY = resolveTerrainLanding({
+      previousBottom: this.previousPlayerBottom,
+      currentBottom: body.bottom,
+      velocityY: body.velocity.y,
+      surfaceYs: getTerrainSurfaceYs(this.levelId, body.center.x),
+    });
+
+    if (landingY === undefined) {
+      this.previousPlayerBottom = body.bottom;
+      return false;
+    }
+
+    const correction = landingY - body.bottom;
+    this.player.setY(this.player.y + correction);
+    body.updateFromGameObject();
+    body.setVelocityY(0);
+    this.previousPlayerBottom = landingY;
+    return true;
+  }
+
+  private checkForFatalFall(): boolean {
+    const body = this.player.body as Phaser.Physics.Arcade.Body;
+    const deathZone = getTerrainDeathZoneAt(
+      this.levelId,
+      body.center.x,
+      body.bottom,
+    );
+    if (!deathZone && body.bottom < 716) return false;
+    this.player.defeatInstantly();
+    return true;
   }
 
   private getActorSpawnY(x: number): number {

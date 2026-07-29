@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  getTerrainCollisionSegments,
+  getTerrainDeathZoneAt,
+  getTerrainDeathZones,
   getTerrainPlatforms,
   getTerrainSurfaceAt,
   getTerrainSurfaceY,
@@ -31,18 +34,47 @@ describe("authored terrain collision", () => {
 
   it("matches representative painted platform tops", () => {
     expect(getTerrainSurfaceY(1, 500)).toBe(479);
-    expect(getTerrainSurfaceY(2, 620)).toBe(502);
+    expect(getTerrainSurfaceY(2, 620)).toBeCloseTo(510.25);
     expect(getTerrainSurfaceY(3, 620)).toBe(508);
     expect(getTerrainSurfaceY(4, 200)).toBe(500);
     expect(getTerrainSurfaceY(5, 620)).toBe(554);
     expect(getTerrainSurfaceY(5, 1020)).toBe(603);
-    expect(getTerrainSurfaceY(6, 900)).toBe(606);
+    expect(getTerrainSurfaceY(6, 900)).toBeCloseTo(581);
     expect(getTerrainSurfaceY(7, 620)).toBe(527);
-    expect(getTerrainSurfaceY(7, 900)).toBe(580);
+    expect(getTerrainSurfaceY(7, 900)).toBeCloseTo(581);
   });
 
   it("builds three complete collision segments", () => {
     expect(getTerrainPlatforms(3)).toHaveLength(15);
     expect(getTerrainPlatforms(6)).toHaveLength(3);
+  });
+
+  it("interpolates painted slopes instead of returning one flat top", () => {
+    expect(getTerrainSurfaceY(2, 520)).toBe(518);
+    expect(getTerrainSurfaceY(2, 1040)).toBe(500);
+    expect(getTerrainSurfaceY(2, 1280)).toBe(475);
+  });
+
+  it("builds narrow collision steps that trace authored slopes", () => {
+    const slopeSteps = getTerrainCollisionSegments(2).filter(
+      (platform) => platform.x >= 520 && platform.x < 1280,
+    );
+    expect(slopeSteps.length).toBeGreaterThan(25);
+    expect(slopeSteps[0].y).toBeGreaterThan(slopeSteps.at(-1)!.y);
+    expect(Math.max(...slopeSteps.map((step) => step.width))).toBeLessThanOrEqual(
+      24,
+    );
+  });
+
+  it("repeats fatal abyss zones but only activates below their lip", () => {
+    expect(getTerrainDeathZones(1)).toHaveLength(3);
+    expect(getTerrainDeathZoneAt(1, 930, 620)).toBeUndefined();
+    expect(getTerrainDeathZoneAt(1, 930, 640)).toMatchObject({
+      x: 844,
+      width: 236,
+    });
+    expect(getTerrainDeathZoneAt(1, 930 + 1280, 640)).toMatchObject({
+      x: 2124,
+    });
   });
 });

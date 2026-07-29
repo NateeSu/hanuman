@@ -7,6 +7,9 @@
 - [x] seven-level definition/order tests
 - [x] three-level save migration tests
 - [x] terrain coverage for all seven levels
+- [x] painted terrain-surface interpolation and stepped collision tests
+- [x] uphill/downhill landing resolution tests
+- [x] repeated fatal-abyss zones and safe-height boundary tests
 - [x] seven bosses use seven distinct projectile/effect identities
 - [x] all boss display heights are at least 2× the tallest normal enemy
 - [x] all 21 boss idle/cast/strike pose assets exist and pass minimum-size checks
@@ -31,6 +34,9 @@
 - [x] Maiyarap renders staff strike and lime-violet homing hypnosis orb
 - [x] Akkhani renders a two-fist magma slam pose
 - [x] boss scale remains readable without overlapping the HUD
+- [x] Hanuman's feet follow painted slopes and corrected platform tops in all seven levels
+- [x] Level 1 large-cliff fall triggers immediate defeat and safe checkpoint respawn
+- [x] fatal zones remain below the jump path and do not activate above the abyss threshold
 - [x] no console error or asset 404
 - [x] 1280×720 desktop
 - [x] 844×390 mobile landscape

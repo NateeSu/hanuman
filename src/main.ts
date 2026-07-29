@@ -3,6 +3,7 @@ import "./styles/game.css";
 import { BootScene } from "./scenes/BootScene";
 import { PreloadScene } from "./scenes/PreloadScene";
 import { MainMenuScene } from "./scenes/MainMenuScene";
+import { DeveloperScene } from "./scenes/DeveloperScene";
 import { LevelSelectScene } from "./scenes/LevelSelectScene";
 import { SettingsScene } from "./scenes/SettingsScene";
 import {
@@ -49,6 +50,7 @@ const config: Phaser.Types.Core.GameConfig = {
     BootScene,
     PreloadScene,
     MainMenuScene,
+    DeveloperScene,
     LevelSelectScene,
     SettingsScene,
     Level01Scene,

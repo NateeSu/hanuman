@@ -61,6 +61,7 @@ export class PreloadScene extends Phaser.Scene {
 
   preload(): void {
     this.load.image("poster", "/assets/poster/opening-poster.webp");
+    this.load.image("developer-family-logo", "/assets/ui/branding/developer-father-son-logo.png");
     this.load.once("filecomplete-image-poster", () => this.showPoster());
     Array.from({ length: LEVEL_COUNT }, (_, index) => index + 1).forEach(
       (levelId) => {

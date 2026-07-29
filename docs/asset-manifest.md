@@ -12,6 +12,14 @@ Art direction: `prompts/art-direction.md`
 
 Crop/pivot: cover within 16:9, focal point Hanuman left and Maiyarap right. Text and buttons remain code-native.
 
+## Developer family logo
+
+| Runtime path | Purpose | Source resolution | Final | Transparency | Prompt |
+|---|---|---:|---:|---|---|
+| `public/assets/ui/branding/developer-father-son-logo.png` | Father-and-son portrait on the dedicated developer scene | 1536×1536 | 1536×1536 PNG | no | Identity-preserving circular hand-painted portrait from the supplied family photo |
+
+The Thai credit remains code-native for crisp rendering at every game scale: `พัฒนาเกมส์โดยพ่อน๊อตและน้องเปรม`. The generated emblem uses a midnight-teal square field that blends into the dedicated scene.
+
 ## Hanuman pose atlas
 
 Runtime directory: `public/assets/characters/hanuman/poses/`

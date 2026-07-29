@@ -73,7 +73,14 @@ export class MainMenuScene extends Phaser.Scene {
     makeButton(this, 805, 514, t(lang, "settings"), () =>
       this.scene.start("SettingsScene"),
     );
-    makeButton(this, 805, 590, t(lang, "credits"), () => this.showCredits(), { width: 350 });
+    makeButton(
+      this,
+      805,
+      590,
+      lang === "th" ? "ผู้พัฒนา" : "Developers",
+      () => this.scene.start("DeveloperScene"),
+      { width: 350 },
+    );
 
     this.add
       .text(805, 679, t(lang, "controls"), {
@@ -82,30 +89,5 @@ export class MainMenuScene extends Phaser.Scene {
         color: "#8f9db8",
       })
       .setOrigin(0.5);
-  }
-
-  private showCredits(): void {
-    const blocker = this.add.rectangle(640, 360, 1280, 720, 0x03040b, 0.9).setInteractive();
-    const panel = this.add.rectangle(640, 360, 680, 430, 0x10152a, 0.98).setStrokeStyle(2, 0xd9ae5a);
-    const text = this.add
-      .text(
-        640,
-        335,
-        "สร้างขึ้นใหม่สำหรับโครงการนี้\n\nภาพหลัก ตัวละคร ฉาก และวัตถุทั้งหมด\nสร้างด้วย OpenAI Image Generation\n\nดนตรีและเอฟเฟกต์เสียงสังเคราะห์แบบ procedural\nไม่มี asset หรือเสียงบุคคลที่สาม\n\nอ้างอิงวรรณคดีไทย: รามเกียรติ์ ตอนศึกไมยราพ",
-        {
-          fontFamily: FONT_FAMILY,
-          fontSize: "22px",
-          color: "#e7edf8",
-          align: "center",
-          lineSpacing: 10,
-        },
-      )
-      .setOrigin(0.5);
-    const close = makeButton(this, 640, 540, "ปิด • Close", () => {
-      blocker.destroy();
-      panel.destroy();
-      text.destroy();
-      close.destroy();
-    }, { width: 240 });
   }
 }
